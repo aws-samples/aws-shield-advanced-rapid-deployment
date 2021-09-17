@@ -1,0 +1,190 @@
+AWSTemplateFormatVersion: 2010-09-09
+Parameters:
+  CodeS3BucketPrefix:
+    Type: String
+  CodeS3Key:
+    Type: String
+  HealthCheckKey:
+    Type: String
+    Default: route53/cfn/healthChecks/alb-health-check.yaml
+  HealthCheckRegions:
+    Type: String
+    Default: us-east-1,us-west-2,eu-west-1
+    Description: "Comma separated list of regions to complete Route 53 health checks from list of us-east-1, us-west-1, us-west-2, eu-west-1, ap-southeast-1, ap-southeast-2, ap-northeast-1, sa-east-1"
+  CheckTags:
+    Type: String
+    Default: '[]'
+  snsTopicDetails:
+    Type: String
+Resources:
+  HealthCheckEvent:
+    DependsOn: R53HealthCheckLambdaPolicy
+    Type: AWS::Events::Rule
+    Properties:
+      Description: "ALBCreateDeleteHealthChecks"
+      Name: "CWE-ALBCreateDeleteHealthChecks"
+      EventPattern:
+        source:
+          - "aws.elasticloadbalancing"
+        detail-type:
+          - AWS API Call via CloudTrail
+        detail:
+          eventSource:
+            - elasticloadbalancing.amazonaws.com
+          eventName:
+            - CreateLoadBalancer
+            - DeleteLoadBalancer
+            - AddTags
+            - RemoveTags
+      Targets:
+        - Arn: !GetAtt R53HealthCheckQueue.Arn
+          Id:
+            HealthCheckLambda
+  R53HealthCheckDLQ:
+    Type: AWS::SQS::Queue
+    Properties: 
+      MessageRetentionPeriod: 86400
+  R53HealthCheckQueue:
+    Type: AWS::SQS::Queue
+    Properties: 
+      DelaySeconds: 0
+      QueueName: !Sub "ALBQueue-${AWS::StackName}"
+      VisibilityTimeout: 60
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt R53HealthCheckDLQ.Arn
+        maxReceiveCount: 60
+  R53HealthCheckQueuePolicy: 
+    Type: AWS::SQS::QueuePolicy
+    Properties: 
+      Queues: 
+        - !Ref R53HealthCheckQueue
+      PolicyDocument: 
+        Statement: 
+          - 
+            Effect: "Allow"
+            Principal:  
+              Service: events.amazonaws.com
+            Action: 
+              - "sqs:SendMessage" 
+            Resource: !GetAtt R53HealthCheckQueue.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !Sub "arn:aws:events:${AWS::Region}:${AWS::AccountId}:rule/CWE-ALBCreateDeleteHealthChecks"
+          - 
+            Effect: "Allow"
+            Principal:  
+              AWS: 
+                - !GetAtt R53HealthCheckLambdaRole.Arn
+            Action: 
+              - "sqs:SendMessage" 
+              - "sqs:ReceiveMessage"
+              - "sqs:GetQueueAttributes"
+              - "sqs:SendMessage"
+            Resource: !GetAtt R53HealthCheckQueue.Arn
+  #Connect SQS TO Lambda
+  R53HealthCheckSourceMapping:
+    Type: AWS::Lambda::EventSourceMapping
+    DependsOn: R53HealthCheckLambdaPolicy
+    Properties:
+      EventSourceArn: !GetAtt R53HealthCheckQueue.Arn
+      FunctionName: !GetAtt R53HealthCheckLambda.Arn
+      BatchSize: 1
+  #Lambda Permissions for SQS Queue
+  R53HealthCheckSQSPermissions:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt R53HealthCheckLambda.Arn
+      Action: lambda:InvokeFunction
+      Principal: sqs.amazonaws.com
+      SourceArn: !GetAtt R53HealthCheckQueue.Arn
+  R53HealthCheckLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+              - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+  R53HealthCheckLambdaPolicy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: LocalPolicy
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - "logs:CreateLogGroup"
+              - "logs:CreateLogStream"
+              - "Logs:PutLogEvents"
+            Resource: "arn:aws:logs:*:*:*"
+          - Effect: Allow
+            Action:
+              - "route53:ListHealthChecks"
+              - "route53:CreateHealthCheck"
+              - "route53:GetHealthCheck"
+              - "route53:UpdateHealthCheck"
+              - "route53:DeleteHealthCheck"
+              - "route53:ChangeTagsForResource"
+              - "route53:ListTagsForResource"
+              - "elasticloadbalancing:DescribeLoadBalancers"
+              - "elasticloadbalancing:DescribeListeners"
+              - "elasticloadbalancing:DescribeTags"
+              - "cloudwatch:DeleteAlarms"
+              - "cloudwatch:DescribeAlarms"
+              - "cloudwatch:PutMetricAlarm"
+              - "shield:AssociateHealthCheck"
+              - "shield:DisassociateHealthCheck"              
+              - "shield:DescribeProtection"
+              - "cloudformation:DescribeStacks"
+              - "cloudformation:CreateStack"
+              - "cloudformation:UpdateStack"
+              - "cloudformation:DeleteStack"
+              - "cloudformation:TagResource"
+              - "cloudformation:UntagResource"
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - "sqs:ReceiveMessage"
+              - "sqs:DeleteMessage"
+              - "sqs:GetQueueAttributes"
+              - "sqs:SendMessage"
+            Resource: !GetAtt R53HealthCheckQueue.Arn
+          - Effect: Allow
+            Action:
+              - "s3:GetObject"
+            Resource: !Sub "arn:aws:s3:::${CodeS3BucketPrefix}-*/*"
+      Roles:
+        - !Ref R53HealthCheckLambdaRole
+  EnableHealthChecksImmeidately:
+    DependsOn: R53HealthCheckLambdaPolicy
+    Type: Custom::HCCreation
+    Properties:
+      ServiceToken: !GetAtt R53HealthCheckLambda.Arn
+      HC_Regions: !Ref HealthCheckRegions
+      checkTags: !Ref CheckTags
+      snsTopicDetails: !Ref snsTopicDetails
+  R53HealthCheckLambda:
+      Type: AWS::Lambda::Function
+      Properties:
+        Runtime: python3.8
+        Role: !GetAtt R53HealthCheckLambdaRole.Arn
+        Handler: route53/lambda/albHC/index.lambda_handler
+        Timeout: 60
+        Code:
+          S3Bucket: !Sub "${CodeS3BucketPrefix}-${AWS::Region}"
+          S3Key: !Ref CodeS3Key
+        Environment:
+          Variables:
+            HC_Regions: !Ref HealthCheckRegions
+            checkTags: !Ref CheckTags
+            snsTopicDetails: !Ref snsTopicDetails
+            sqsQueueURL: !Ref R53HealthCheckQueue
+            CodeS3Bucket: !Sub "${CodeS3BucketPrefix}-${AWS::Region}"
+            HealthCheckKey: !Ref HealthCheckKey
+            AccountId: !Ref AWS::AccountId

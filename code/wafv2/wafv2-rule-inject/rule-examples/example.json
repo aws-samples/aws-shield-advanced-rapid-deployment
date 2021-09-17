@@ -1,0 +1,36 @@
+[{
+	"Name": "RateBasedLimit",
+	"Priority": 8,
+	"Statement": {
+		"RateBasedStatement": {
+			"Limit": 100,
+			"AggregateKeyType": "IP"
+		}
+	},
+	"Action": {
+		"Count": {}
+	},
+	"VisibilityConfig": {
+		"SampledRequestsEnabled": true,
+		"CloudWatchMetricsEnabled": true,
+		"MetricName": "RateBasedLimit"
+	}
+},
+{
+	"Name": "Blue",
+	"Priority": 7,
+	"Statement": {
+		"RateBasedStatement": {
+			"Limit": 100,
+			"AggregateKeyType": "IP"
+		}
+	},
+	"Action": {
+		"Count": {}
+	},
+	"VisibilityConfig": {
+		"SampledRequestsEnabled": true,
+		"CloudWatchMetricsEnabled": true,
+		"MetricName": "RateBasedLimit"
+	}
+}]

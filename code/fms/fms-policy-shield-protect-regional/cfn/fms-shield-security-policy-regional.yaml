@@ -1,0 +1,134 @@
+AWSTemplateFormatVersion: 2010-09-09
+Parameters:
+  AccountScopeList:
+    Type: CommaDelimitedList
+    Default: <na>
+  OUScopeList:
+    Type: CommaDelimitedList
+    Default: na
+    Description: if OrgOrOUScope is OU, specify a comma separated list of AWS Organization OU's
+  IncludeExcludeScope:
+    Type: String
+    Default: Include
+    AllowedValues:
+      - Include
+      - Exclude
+  ScopeType:
+    Type: String
+    Description: "Should Firewall Manager Policies be scoped to the entire org (root) or a specific list of OUs (OU)"
+    Default: Org
+    AllowedValues:
+      - Org
+      - OU
+      - Accounts
+  ResourceTagUsage:
+    Type: String
+    Default: Include
+    Description: Include will scope to only include when ResourceTags match, Exclude will exclude when target resource tags match ResourceTags
+    AllowedValues:
+      - Include
+      - Exclude
+  ProtectRegionalResourceTypes:
+    Type: String
+    Description: If ResourceScope is Regional, resources to protect.  This is property is not used if ResourceScope is CLOUDFRONT
+    Default: AWS::ElasticLoadBalancingV2::LoadBalancer,AWS::ElasticLoadBalancing::LoadBalancer,AWS::EC2::EIP
+    AllowedValues:
+      - AWS::ElasticLoadBalancingV2::LoadBalancer,AWS::ElasticLoadBalancing::LoadBalancer,AWS::EC2::EIP
+      - AWS::ElasticLoadBalancingV2::LoadBalancer,AWS::ElasticLoadBalancing::LoadBalancer
+      - AWS::ElasticLoadBalancingV2::LoadBalancer,AWS::EC2::EIP
+      - AWS::ElasticLoadBalancing::LoadBalancer,AWS::EC2::EIP
+      - AWS::ElasticLoadBalancingV2::LoadBalancer
+      - AWS::ElasticLoadBalancing::LoadBalancer
+      - AWS::EC2::EIP
+      - <na>
+  AutoRemediate:
+    Type: String
+    Description: "Should configured AWS resource types have Shield Advanced protection enabled (true) or audit (false)"
+    Default: true
+    AllowedValues:
+      - true
+      - false
+  ScopeTagName1:
+    Type: String
+    Default: <na>
+  ScopeTagName2:
+    Type: String
+    Default: <na>
+  ScopeTagName3:
+    Type: String
+    Default: <na>
+  ScopeTagValue1:
+    Type: String
+    Default: <na>
+  ScopeTagValue2:
+    Type: String
+    Default: <na>
+  ScopeTagValue3:
+    Type: String
+    Default: <na>
+Conditions:
+  ScopeTagName1Flag: !Not [!Equals [!Ref ScopeTagName1, "<na>"]]
+  ScopeTagName2Flag: !Not [!Equals [!Ref ScopeTagName2, "<na>"]]
+  ScopeTagName3Flag: !Not [!Equals [!Ref ScopeTagName3, "<na>"]]
+  ScopeTagValue1Flag: !And
+    - !Condition ScopeTagName1Flag
+    - !Not [!Equals [!Ref ScopeTagValue1, "<na>"]]
+  ScopeTagValue2Flag: !And
+    - !Condition ScopeTagName2Flag
+    - !Not [!Equals [!Ref ScopeTagValue2, "<na>"]]
+  ScopeTagValue3Flag: !And
+    - !Condition ScopeTagName3Flag
+    - !Not [!Equals [!Ref ScopeTagValue3, "<na>"]]
+  #ScopeTagValue2Flag: !And [!Condition ScopeTagName2Flag, !Not [!Equals [!Ref ScopeTagValue2, "<na>"]]]
+  #ScopeTagValue3Flag: !If [!Condition ScopeTagName3Flag, !Not [!Equals [!Ref ScopeTagValue3, "<na>"]]]
+  #ScopeTagValue3Flag: !And [Condition: ScopeTagName3Flag, !Not [!Equals [!Ref ScopeTagValue3, "<na>"]]]
+  CreatePolicyFlag: !Not [!Equals [!Ref ProtectRegionalResourceTypes, '<na>']]
+  OUScopeFlag: !Equals [!Ref ScopeType, "OU"]
+  AccountScopeFlag: !Equals [!Ref ScopeType, "Accounts"]
+  ExcludeResourceTagFlag: !Equals [!Ref ResourceTagUsage, "Exclude"]
+  IncludeScopeFlag: !Equals [!Ref IncludeExcludeScope, "Include"]
+  ExcludeScopeFlag: !Equals [!Ref IncludeExcludeScope, "Exclude"]
+  AutoRemediateFlag: !Equals [!Ref AutoRemediate, true]
+Resources:
+  EnableShieldOnResources:
+    Condition: CreatePolicyFlag
+    Type: AWS::FMS::Policy
+    Properties:
+      PolicyName: !Sub 'ShieldProtectionRegional-${AWS::StackName}'
+      ResourceType: ResourceTypeList
+      ResourceTypeList: !Split [",", !Ref ProtectRegionalResourceTypes]
+      ExcludeResourceTags: !If [ExcludeResourceTagFlag, true, false]
+      IncludeMap:
+        ORGUNIT:
+          !If [IncludeScopeFlag, !If [OUScopeFlag, !Ref OUScopeList, !Ref "AWS::NoValue"], !Ref "AWS::NoValue"]
+        ACCOUNT:
+          !If [IncludeScopeFlag, !If [AccountScopeFlag, !Ref AccountScopeList, !Ref "AWS::NoValue"], !Ref "AWS::NoValue"]
+      ExcludeMap:
+        ORGUNIT:
+          !If [ExcludeScopeFlag, !If [OUScopeFlag, !Ref OUScopeList, !Ref "AWS::NoValue"], !Ref "AWS::NoValue"]
+        ACCOUNT:
+          !If [ExcludeScopeFlag, !If [AccountScopeFlag,  !Ref AccountScopeList, !Ref "AWS::NoValue"], !Ref "AWS::NoValue"]
+      RemediationEnabled: !If [AutoRemediateFlag, true, false]
+      SecurityServicePolicyData:
+          Type: SHIELD_ADVANCED
+      DeleteAllPolicyResources: false
+      ResourceTags:
+        !If 
+        - ScopeTagName1Flag
+        -
+          - !If
+            - ScopeTagName1Flag
+            - Key:  !Ref ScopeTagName1
+              Value: !If [ScopeTagValue1Flag, !Ref ScopeTagValue1, ""]
+            - !Ref "AWS::NoValue"
+          - !If
+            - ScopeTagName2Flag
+            - Key:  !Ref ScopeTagName2
+              Value: !If [ScopeTagValue2Flag, !Ref ScopeTagValue2, ""]
+            - !Ref "AWS::NoValue"
+          - !If
+            - ScopeTagName3Flag
+            - Key:  !Ref ScopeTagName3
+              Value: !If [ScopeTagValue3Flag, !Ref ScopeTagValue3, ""]
+            - !Ref "AWS::NoValue"
+        - !Ref "AWS::NoValue"

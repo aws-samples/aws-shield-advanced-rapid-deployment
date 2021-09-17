@@ -1,0 +1,39 @@
+{
+  "preProcessRuleGroups": [
+    {
+      "overrideAction": {
+        "type": "COUNT"
+      },
+      "managedRuleGroupIdentifier": {
+        "vendorName": "AWS",
+        "managedRuleGroupName": "AWSManagedRulesCommonRuleSet"
+      },
+      "ruleGroupType": "ManagedRuleGroup",
+      "excludeRules": []
+    },
+    {
+      "overrideAction": {
+        "type": "COUNT"
+      },
+      "managedRuleGroupIdentifier": {
+        "vendorName": "AWS",
+        "managedRuleGroupName": "AWSManagedRulesKnownBadInputsRuleSet"
+      },
+      "ruleGroupType": "ManagedRuleGroup",
+      "excludeRules": []
+    },
+    {
+      "overrideAction": {
+        "type": "NONE"
+      },
+      "managedRuleGroupIdentifier": {
+        "vendorName": "AWS",
+        "managedRuleGroupName": "AWSManagedRulesAmazonIpReputationList"
+      },
+      "ruleGroupType": "ManagedRuleGroup",
+      "excludeRules": []
+    }
+  ],
+  "postProcessRuleGroups": [],
+  "redactedFields": []
+}

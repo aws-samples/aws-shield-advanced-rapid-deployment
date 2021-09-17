@@ -1,0 +1,65 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Stack for Firehose DeliveryStream S3 Destination.
+Parameters:
+  WAFLogS3Bucket:
+    Type: String
+  KMSKeyArn:
+    Type: String
+    Default: <na>
+Conditions:
+  KMSEncryption: !Not[!Equals[!KMSKeyArn, '<na>']]
+Resources:
+  WAFdeliveryRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: KinesisFirehoseWafDeliveryRole
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: ""
+            Effect: Allow
+            Principal:
+              Service: firehose.amazonaws.com
+            Action: "sts:AssumeRole"
+            Condition:
+              StringEquals:
+                "sts:ExternalId": !Ref "AWS::AccountId"
+  WAFdeliveryPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: firehose_delivery_policy
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - "logs:PutLogEvents"
+            Resource:
+              - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}-id:log-group:KinesisFirehose:log-stream:aws-waf-logs-delivery-${AWS::AccountId}-${AWS::Region}"
+          - Effect: Allow
+            Action:
+              - "s3:AbortMultipartUpload"
+              - "s3:GetBucketLocation"
+              - "s3:GetObject"
+              - "s3:ListBucket"
+              - "s3:ListBucketMultipartUploads"
+              - "s3:PutObject"
+              - "s3:PutObjectAcl"
+            Resource:
+              - !Sub "arn:aws:s3:::${WAFLogS3Bucket}*"
+              - !Sub "arn:aws:s3:::${WAFLogS3Bucket}*/*"
+          - !If
+              - KMSEncryption
+              -
+                - Effect: Allow
+                  Action:
+                    - "kms:Encrypt"
+                    - "kms:Decrypt"
+                    - "kms:ReEncrypt"
+                    - "kms:GenerateDataKey"
+                    - "kms:DescribeKey"
+                  Resource:
+                    - !Ref KMSKeyArn
+              - !Ref "AWS::NoValue"
+      Roles:
+        - !Ref WAFdeliveryRole

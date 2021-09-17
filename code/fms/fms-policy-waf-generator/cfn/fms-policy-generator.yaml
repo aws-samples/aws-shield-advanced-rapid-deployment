@@ -1,0 +1,60 @@
+AWSTemplateFormatVersion: 2010-09-09
+Parameters:
+  CodeS3BucketPrefix:
+    Type: String
+  CodeS3Key:
+    Type: String
+Resources:
+  GenerateFMSPolicyLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'GenerateFMSPolicyLambdaRole-${AWS::Region}'
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+              - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+  GenerateFMSPolicyLambdaPolicy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: CFNUsers
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - "logs:CreateLogGroup"
+              - "logs:CreateLogStream"
+              - "logs:PutLogEvents"
+            Resource: "arn:aws:logs:*:*:*"
+          - Effect: Allow
+            Action:
+              - "s3:GetObject"
+            Resource: !Sub "arn:aws:s3:::${CodeS3BucketPrefix}*/*"
+      Roles:
+        - !Ref GenerateFMSPolicyLambdaRole
+  GenerateFMSPolicyLambdaFunction:
+      Type: AWS::Lambda::Function
+      Properties:
+        Runtime: python3.7
+        Role: !GetAtt GenerateFMSPolicyLambdaRole.Arn
+        Handler: fms/lambda/fms-policy-generator/index.lambda_handler
+        Environment:
+          Variables:
+            CodeS3BucketPrefix: !Ref CodeS3BucketPrefix
+            AccountId: !Ref AWS::AccountId
+            Region: !Ref AWS::Region
+        Code:
+          S3Bucket: !Sub "${CodeS3BucketPrefix}-${AWS::Region}"
+          S3Key: !Ref CodeS3Key
+Outputs:
+  FMSPolicyBuilderLambdaArn:
+    Description: Lambda to build FMS policys
+    Value: !GetAtt GenerateFMSPolicyLambdaFunction.Arn
+    Export:
+      Name: FMSPolicyBuilderLambdaArn

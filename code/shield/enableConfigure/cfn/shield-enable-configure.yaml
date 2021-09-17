@@ -1,0 +1,141 @@
+---
+AWSTemplateFormatVersion: 2010-09-09
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      -
+        Label:
+          default: "Shield Advanced Configurations"
+        Parameters:
+          - EnabledProactiveEngagement
+          - EnableDRTAccess
+          - WAFLogS3Bucket
+          - EmergencyContactEmail1
+          - EmergencyContactPhone1
+          - EmergencyContactEmail2
+          - EmergencyContactPhone2
+      -
+        Label:
+          default: "Lambda Code"
+        Parameters:
+          - CodeS3BucketPrefix
+          - CodeS3Key
+Parameters:
+  CodeS3BucketPrefix:
+    Type: String
+  CodeS3Key:
+    Type: String
+    Default: lambda.zip
+  EmergencyContactCount:
+    Type: String
+    Default: 1
+    AllowedValues:
+       - 1
+       - 2
+  EmergencyContactEmail1:
+    Type: String
+  EmergencyContactEmail2:
+    Type: String
+  EmergencyContactPhone1:
+    Type: String
+    Default: '+15555555555'
+    AllowedPattern: ^\+[0-9]{11}
+  EmergencyContactPhone2:
+    Type: String
+    Default: '+15555555555'
+    AllowedPattern: ^\+[0-9]{11}
+  EnabledProactiveEngagement:
+    Type: String
+    Default: true
+    AllowedValues:
+      - true
+      - false
+  EnableDRTAccess:
+    Type: String
+    Default: True
+    AllowedValues:
+      - True
+      - False
+Conditions:
+    SecondEmergencyContact: !Equals [!Ref EmergencyContactCount , 2]
+Resources:
+  ConfigureShieldLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+              - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+  ConfigureShieldLambdaPolicy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: ConfigureShieldLambdaPolicy
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - "logs:CreateLogGroup"
+              - "logs:CreateLogStream"
+              - "logs:PutLogEvents"
+            Resource: "arn:aws:logs:*:*:*"
+          - Sid: CreateAndManageDRTRole
+            Effect: Allow
+            Action:
+            - iam:GetRole
+            - iam:PassRole
+            - iam:ListAttachedRolePolicies
+            - iam:CreateRole
+            - iam:AttachRolePolicy
+            Resource: !Sub "arn:aws:iam::${AWS::AccountId}:role/AWSDRTAccess"
+          - Sid: ShieldAdvancedConfiguration
+            Effect: Allow
+            Action:
+            - shield:UpdateEmergencyContactSettings
+            - shield:AssociateDRTLogBucket
+            - shield:CreateSubscription
+            - shield:UpdateSubscription
+            - shield:AssociateDRTRole
+            - shield:EnableProactiveEngagement
+            - shield:DisableProactiveEngagement
+            - shield:AssociateProactiveEngagementDetails
+            Resource: "*"
+      Roles:
+        - !Ref ConfigureShieldLambdaRole
+  ConfigureShieldAdvancedLambda:
+    DependsOn: ConfigureShieldLambdaPolicy
+    Type: Custom::ConfigureShieldAdvanced
+    Properties:
+      ServiceToken: !GetAtt ConfigureShieldLambda.Arn
+      EmergencyContactEmail1: !Ref EmergencyContactEmail1
+      EmergencyContactEmail2: !If [SecondEmergencyContact, !Ref EmergencyContactEmail2, !Ref "AWS::NoValue"]
+      EmergencyContactPhone1: !Ref EmergencyContactPhone1
+      EmergencyContactPhone2: !If [SecondEmergencyContact, !Ref EmergencyContactPhone2, !Ref "AWS::NoValue"]
+      EnabledProactiveEngagement: !Ref EnabledProactiveEngagement
+      EmergencyContactCount: !Ref EmergencyContactCount
+      EnableDRTAccess: !Ref EnableDRTAccess
+  ConfigureShieldLambda:
+      Type: AWS::Lambda::Function
+      Properties:
+        Runtime: python3.9
+        Role: !GetAtt ConfigureShieldLambdaRole.Arn
+        Handler: shield/lambda/enableConfigure/index.lambda_handler
+        Code:
+          S3Bucket: !Sub "${CodeS3BucketPrefix}-${AWS::Region}"
+          S3Key: !Ref CodeS3Key
+        Environment:
+          Variables:
+            EmergencyContactEmail1: !Ref EmergencyContactEmail1
+            EmergencyContactEmail2: !If [SecondEmergencyContact, !Ref EmergencyContactEmail2, !Ref "AWS::NoValue"]
+            EmergencyContactPhone1: !Ref EmergencyContactPhone1
+            EmergencyContactPhone2: !If [SecondEmergencyContact, !Ref EmergencyContactPhone2, !Ref "AWS::NoValue"]
+            EmergencyContactCount: !Ref EmergencyContactCount
+            EnabledProactiveEngagement: !Ref EnabledProactiveEngagement
+            EnableDRTAccess: !Ref EnableDRTAccess
+            AccountId: !Ref AWS::AccountId

@@ -1,0 +1,88 @@
+AWSTemplateFormatVersion: 2010-09-09
+Parameters:
+  CodeS3BucketPrefix:
+    Type: String
+  CodeS3Key:
+    Type: String
+  CheckTags:
+    Type: String
+    Default: "[]"
+  ScheduleExpression:
+    Type: String
+    Default: rate(1 hour)
+  TagUsage:
+    Type: String
+    Default: Include
+    AllowedValues:
+    - Include
+    - Exclude
+Resources:
+  RateEvent:
+    DependsOn: R53HostedZoneProtectionLambdaPolicy
+    Type: "AWS::Events::Rule"
+    Properties:
+      Description: CheckRoute53HostedZoneShieldProtection
+      Name: R53HostedZoneShieldProtection
+      ScheduleExpression: !Ref ScheduleExpression
+      Targets:
+        - Arn: !GetAtt R53HostedZoneProtectionLambda.Arn
+          Id: CheckRoute53HostedZoneShieldProtection
+  R53HostedZoneProtectionEventPermissions:
+    Type: "AWS::Lambda::Permission"
+    Properties:
+      FunctionName: !GetAtt R53HostedZoneProtectionLambda.Arn
+      Action: "lambda:InvokeFunction"
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt RateEvent.Arn
+  R53HostedZoneProtectionLambdaRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - "sts:AssumeRole"
+      Path: /
+  R53HostedZoneProtectionLambdaPolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      PolicyName: R53HostedZoneProtectionLambdaPolicy
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - "logs:CreateLogGroup"
+              - "logs:CreateLogStream"
+              - "logs:PutLogEvents"
+            Resource: "arn:aws:logs:*:*:*"
+          - Effect: Allow
+            Action:
+              - "route53:ListHostedZones"
+              - "route53:ListTagsForResources"
+              - "route53:GetHostedZone"
+              - "shield:ListProtections"
+              - "shield:CreateProtection"
+              - "shield:DescribeProtection"
+              - "shield:DeleteProtection"
+            Resource: "*"
+      Roles:
+        - !Ref R53HostedZoneProtectionLambdaRole
+  R53HostedZoneProtectionLambda:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Runtime: python3.7
+      Role: !GetAtt R53HostedZoneProtectionLambdaRole.Arn
+      Handler: fms/lambda/r53-hosted-zone-protection/index.lambda_handler
+      Timeout: 300
+      Code:
+        S3Bucket: !Sub "${CodeS3BucketPrefix}-${AWS::Region}"
+        S3Key: !Ref CodeS3Key
+      Environment:
+        Variables:
+          checkTags: !Ref CheckTags
+          TagUsage: !Ref TagUsage
