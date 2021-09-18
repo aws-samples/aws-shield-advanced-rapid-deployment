@@ -116,6 +116,13 @@ Resources:
 
   R53HealthCheckLambdaPolicy:
     Type: 'AWS::IAM::Policy'
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W12
+            reason: "Wildcard IAM policy required"
+          - id: W58
+            reason: "Permissions granted, CFN_Nag not parsing correctly?"
     Properties:
       PolicyName: LocalPolicy
       PolicyDocument:
@@ -177,6 +184,15 @@ Resources:
       snsTopicDetails: !Ref snsTopicDetails
   R53HealthCheckLambda:
     Type: AWS::Lambda::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W58
+            reason: "Permissions granted, CFN_Nag not parsing correctly?"
+          - id: W89
+            reason: "Not applicable for use case"
+          - id: W92
+            reason: "Not applicable for use case"
     Properties:
       Runtime: python3.7
       Role: !GetAtt R53HealthCheckLambdaRole.Arn

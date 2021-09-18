@@ -113,6 +113,11 @@ Resources:
 
   R53HealthCheckLambdaPolicy:
     Type: 'AWS::IAM::Policy'
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W12
+            reason: "Wildcard IAM policy required"
     Properties:
       PolicyName: LocalPolicy
       PolicyDocument:
@@ -171,21 +176,30 @@ Resources:
       checkTags: !Ref CheckTags
       snsTopicDetails: !Ref snsTopicDetails
   R53HealthCheckLambda:
-      Type: AWS::Lambda::Function
-      Properties:
-        Runtime: python3.8
-        Role: !GetAtt R53HealthCheckLambdaRole.Arn
-        Handler: route53/lambda/cloudfrontHC/index.lambda_handler
-        Timeout: 60
-        Code:
-          S3Bucket: !Sub "${CodeS3BucketPrefix}-${AWS::Region}"
-          S3Key: !Ref CodeS3Key
-        Environment:
-          Variables:
-            HC_Regions: !Ref HealthCheckRegions
-            checkTags: !Ref CheckTags
-            snsTopicDetails: !Ref snsTopicDetails
-            sqsQueueURL: !Ref R53HealthCheckQueue
-            HealthCheckKey: !Ref HealthCheckKey
-            AccountId: !Ref AWS::AccountId
-            CodeS3Bucket: !Sub "${CodeS3BucketPrefix}-${AWS::Region}"
+    Type: AWS::Lambda::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W58
+            reason: "Permissions granted, CFN_Nag not parsing correctly?"
+          - id: W89
+            reason: "Not applicable for use case"
+          - id: W92
+            reason: "Not applicable for use case"
+    Properties:
+      Runtime: python3.8
+      Role: !GetAtt R53HealthCheckLambdaRole.Arn
+      Handler: route53/lambda/cloudfrontHC/index.lambda_handler
+      Timeout: 60
+      Code:
+        S3Bucket: !Sub "${CodeS3BucketPrefix}-${AWS::Region}"
+        S3Key: !Ref CodeS3Key
+      Environment:
+        Variables:
+          HC_Regions: !Ref HealthCheckRegions
+          checkTags: !Ref CheckTags
+          snsTopicDetails: !Ref snsTopicDetails
+          sqsQueueURL: !Ref R53HealthCheckQueue
+          HealthCheckKey: !Ref HealthCheckKey
+          AccountId: !Ref AWS::AccountId
+          CodeS3Bucket: !Sub "${CodeS3BucketPrefix}-${AWS::Region}"

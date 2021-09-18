@@ -16,6 +16,7 @@ Parameters:
     AllowedValues:
     - Include
     - Exclude
+  
 Resources:
   RateEvent:
     DependsOn: R53HostedZoneProtectionLambdaPolicy
@@ -49,6 +50,11 @@ Resources:
       Path: /
   R53HostedZoneProtectionLambdaPolicy:
     Type: "AWS::IAM::Policy"
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W12
+            reason: "all resources required"
     Properties:
       PolicyName: LocalPolicy
       PolicyDocument:
@@ -74,6 +80,15 @@ Resources:
         - !Ref R53HostedZoneProtectionLambdaRole
   R53HostedZoneProtectionLambda:
     Type: "AWS::Lambda::Function"
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W58
+            reason: "Permissions granted, CFN_Nag not parsing correctly?"
+          - id: W89
+            reason: "Not applicable for use case"
+          - id: W92
+            reason: "Not applicable for use case"
     Properties:
       Runtime: python3.7
       Role: !GetAtt R53HostedZoneProtectionLambdaRole.Arn

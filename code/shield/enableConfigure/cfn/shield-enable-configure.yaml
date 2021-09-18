@@ -74,6 +74,13 @@ Resources:
       Path: /
   ConfigureShieldLambdaPolicy:
     Type: 'AWS::IAM::Policy'
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W12
+            reason: "Wildcard IAM policy required"
+          - id: W58
+            reason: "Permissions granted, CFN_Nag not parsing correctly?"
     Properties:
       PolicyName: ConfigureShieldLambdaPolicy
       PolicyDocument:
@@ -121,21 +128,30 @@ Resources:
       EmergencyContactCount: !Ref EmergencyContactCount
       EnableDRTAccess: !Ref EnableDRTAccess
   ConfigureShieldLambda:
-      Type: AWS::Lambda::Function
-      Properties:
-        Runtime: python3.9
-        Role: !GetAtt ConfigureShieldLambdaRole.Arn
-        Handler: shield/lambda/enableConfigure/index.lambda_handler
-        Code:
-          S3Bucket: !Sub "${CodeS3BucketPrefix}-${AWS::Region}"
-          S3Key: !Ref CodeS3Key
-        Environment:
-          Variables:
-            EmergencyContactEmail1: !Ref EmergencyContactEmail1
-            EmergencyContactEmail2: !If [SecondEmergencyContact, !Ref EmergencyContactEmail2, !Ref "AWS::NoValue"]
-            EmergencyContactPhone1: !Ref EmergencyContactPhone1
-            EmergencyContactPhone2: !If [SecondEmergencyContact, !Ref EmergencyContactPhone2, !Ref "AWS::NoValue"]
-            EmergencyContactCount: !Ref EmergencyContactCount
-            EnabledProactiveEngagement: !Ref EnabledProactiveEngagement
-            EnableDRTAccess: !Ref EnableDRTAccess
-            AccountId: !Ref AWS::AccountId
+    Type: AWS::Lambda::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W58
+            reason: "Permissions granted, CFN_Nag not parsing correctly?"
+          - id: W89
+            reason: "Not applicable for use case"
+          - id: W92
+            reason: "Not applicable for use case"
+    Properties:
+      Runtime: python3.9
+      Role: !GetAtt ConfigureShieldLambdaRole.Arn
+      Handler: shield/lambda/enableConfigure/index.lambda_handler
+      Code:
+        S3Bucket: !Sub "${CodeS3BucketPrefix}-${AWS::Region}"
+        S3Key: !Ref CodeS3Key
+      Environment:
+        Variables:
+          EmergencyContactEmail1: !Ref EmergencyContactEmail1
+          EmergencyContactEmail2: !If [SecondEmergencyContact, !Ref EmergencyContactEmail2, !Ref "AWS::NoValue"]
+          EmergencyContactPhone1: !Ref EmergencyContactPhone1
+          EmergencyContactPhone2: !If [SecondEmergencyContact, !Ref EmergencyContactPhone2, !Ref "AWS::NoValue"]
+          EmergencyContactCount: !Ref EmergencyContactCount
+          EnabledProactiveEngagement: !Ref EnabledProactiveEngagement
+          EnableDRTAccess: !Ref EnableDRTAccess
+          AccountId: !Ref AWS::AccountId

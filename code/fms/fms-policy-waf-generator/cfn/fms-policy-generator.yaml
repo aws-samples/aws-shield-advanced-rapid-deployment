@@ -7,6 +7,11 @@ Parameters:
 Resources:
   GenerateFMSPolicyLambdaRole:
     Type: AWS::IAM::Role
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: "Defining to ensure multi-region gets unique name"
     Properties:
       RoleName: !Sub 'GenerateFMSPolicyLambdaRole-${AWS::Region}'
       AssumeRolePolicyDocument:
@@ -39,19 +44,28 @@ Resources:
       Roles:
         - !Ref GenerateFMSPolicyLambdaRole
   GenerateFMSPolicyLambdaFunction:
-      Type: AWS::Lambda::Function
-      Properties:
-        Runtime: python3.7
-        Role: !GetAtt GenerateFMSPolicyLambdaRole.Arn
-        Handler: fms/lambda/fms-policy-generator/index.lambda_handler
-        Environment:
-          Variables:
-            CodeS3BucketPrefix: !Ref CodeS3BucketPrefix
-            AccountId: !Ref AWS::AccountId
-            Region: !Ref AWS::Region
-        Code:
-          S3Bucket: !Sub "${CodeS3BucketPrefix}-${AWS::Region}"
-          S3Key: !Ref CodeS3Key
+    Type: AWS::Lambda::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W58
+            reason: "It does..."
+          - id: W89
+            reason: "Not applicable"
+          - id: W92
+            reason: "Not appropiate for application use of Lambda"
+    Properties:
+      Runtime: python3.7
+      Role: !GetAtt GenerateFMSPolicyLambdaRole.Arn
+      Handler: fms/lambda/fms-policy-generator/index.lambda_handler
+      Environment:
+        Variables:
+          CodeS3BucketPrefix: !Ref CodeS3BucketPrefix
+          AccountId: !Ref AWS::AccountId
+          Region: !Ref AWS::Region
+      Code:
+        S3Bucket: !Sub "${CodeS3BucketPrefix}-${AWS::Region}"
+        S3Key: !Ref CodeS3Key
 Outputs:
   FMSPolicyBuilderLambdaArn:
     Description: Lambda to build FMS policys
