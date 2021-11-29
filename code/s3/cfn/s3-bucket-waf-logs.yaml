@@ -1,0 +1,66 @@
+AWSTemplateFormatVersion: 2010-09-09
+Parameters:
+    WAFLogS3BucketPrefix:
+        Type: String
+        Default: central-waf-logs
+    AWSOrgId:
+        Type: String
+    SourceRoleName:
+        Type: String
+        Default: KinesisFirehoseWafDeliveryRole
+Resources:
+  WAFLogsS3Bucket:
+    Type: "AWS::S3::Bucket"
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W35
+            reason: "Not realistic given we would need to create another bucket that does not have this enabled as well"
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub "${WAFLogS3BucketPrefix}-${AWS::AccountId}-${AWS::Region}"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !Ref KMSKey
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerPreferred
+  S3BucketPolicy:
+    Type: "AWS::S3::BucketPolicy"
+    Properties:
+      Bucket: !Ref WAFLogsS3Bucket
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${AWS::AccountId}:role/${SourceRoleName}"
+            Action:
+              - s3:AbortMultipartUpload
+              - s3:GetBucketLocation
+              - s3:GetObject
+              - s3:ListBucket
+              - s3:ListBucketMultipartUploads
+              - s3:PutObject
+              - s3:PutObjectAcl
+            Resource:
+              - !Sub "${WAFLogsS3Bucket.Arn}/*"
+              - !GetAtt WAFLogsS3Bucket.Arn
+  KMSKey:
+    Type: 'AWS::KMS::Key'
+    Properties:
+      Description: RSA-3072 asymmetric KMS key for signing and verification
+      KeySpec: RSA_3072
+      KeyUsage: SIGN_VERIFY
+      KeyPolicy:
+        Version: 2012-10-17
+        Id: key-default-1
+        Statement:
+          - Sid: Enable IAM User Permissions
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action: 'kms:*'
+            Resource: '*'

@@ -6,4 +6,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.0] - 2021-09-17
 ### Added
-- Initial Deployment of examples
+- Initial Deployment of aws-shield-advanced-rapid-deployment

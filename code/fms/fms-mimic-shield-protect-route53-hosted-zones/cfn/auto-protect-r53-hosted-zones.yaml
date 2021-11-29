@@ -79,6 +79,7 @@ Resources:
         - !Ref R53HostedZoneProtectionLambdaRole
   R53HostedZoneProtectionLambda:
     Type: "AWS::Lambda::Function"
+    DependsOn: R53HostedZoneProtectionLambdaPolicy
     Metadata:
       cfn_nag:
         rules_to_suppress:

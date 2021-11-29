@@ -1,0 +1,292 @@
+AWSTemplateFormatVersion: 2010-09-09
+Parameters:
+  CodeS3BucketPrefix:
+    Type: String
+  CodeS3Key:
+    Type: String
+    Default: lambda.zip
+  HealthCheckKey:
+    Type: String
+    Default: route53/cfn/healthChecks/cf-health-check.yaml
+  Remediation:
+    Type: String
+    Default: True
+    AllowedValues:
+      - True
+      - False
+  ALBHealthCheckKey:
+    Type: String
+    Default: code/route53/healthChecks/alb-health-check.yaml
+  CloudfrontHealthCheckKey:
+    Type: String
+    Default: code/route53/healthChecks/cf-health-check.yaml
+  EIPEC2HealthCheckKey:
+    Type: String
+    Default: code/route53/healthChecks/eip-health-check.yaml
+  NLBHealthCheckKey:
+    Type: String
+    Default: code/route53/healthChecks/nlb-health-check.yaml
+  CheckResourceType:
+    Type: String
+    Default: AWS::Cloudfront::Distribition
+  HealthCheckRegions:
+    Type: String
+    Default: us-east-1,us-west-2,eu-west-1
+    Description: "Comma separated list of regions to complete Route 53 health checks from list of us-east-1, us-west-1, us-west-2, eu-west-1, ap-southeast-1, ap-southeast-2, ap-northeast-1, sa-east-1"
+  CheckTags:
+    Type: String
+    Default: '[]'
+  snsTopicDetails:
+    Type: String
+Resources:
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+              - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+  LambdaRolePolicy:
+    Type: 'AWS::IAM::Policy'
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W12
+            reason: "Wildcard resources required for statement1 actions, except config, all are read only"
+          - id: W58
+            reason: "Permissions are granted, cfn-nag does not recognize"
+          - id: W89
+            reason: "VPC bound lambda is not appropiate for this use case"
+          - id: W92
+            reason: "Reserved concurrency is not appropiate for this use case"
+    Properties:
+      PolicyName: Policy
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - "logs:CreateLogGroup"
+              - "logs:CreateLogStream"
+              - "logs:PutLogEvents"
+            Resource: "arn:aws:logs:*:*:*"
+          - Effect: Allow
+            Action:
+              - "config:PutEvaluations"
+              - "cloudfront:GetDistribution"
+              - "cloudfront:ListTagsForResource"
+              - "shield:AssociateHealthCheck"
+              - "shield:DisassociateHealthCheck"
+              - "shield:DescribeProtection"
+              - "shield:ListProtections"
+              - "route53:GetHealthCheck"
+              - "route53:CreateHealthCheck"
+              - "route53:UpdateHealthCheck"
+              - "route53:DeleteHealthCheck"
+              - "route53:ChangeTagsForResource"
+              - "cloudwatch:DescribeAlarms"
+              - "cloudwatch:PutMetricAlarm"
+              - "cloudwatch:DeleteAlarms"
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - "lambda:InvokeFunction"
+            Resource:
+              - !ImportValue Route53ShieldProtectionManageLambdaFunctionArn
+
+          - Effect: Allow
+            Action:
+              - "cloudformation:CreateStack"
+              - "cloudformation:DeleteStack"
+              - "cloudformation:UpdateStack"
+              - "cloudformation:DescribeStacks"
+            Resource:
+              - !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/*-HealthChecks/*"
+          - Effect: Allow
+            Action:
+              - "s3:GetObject"
+            Resource:
+              - !Sub "arn:aws:s3:::${CodeS3BucketPrefix}-${AWS::Region}/*"
+      Roles:
+        - !Ref LambdaRole
+  ConfigPermissionToCallLambda:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName:
+        Fn::GetAtt:
+          - ConfigRuleLambdaFunction
+          - Arn
+      Action: "lambda:InvokeFunction"
+      Principal: "config.amazonaws.com"
+  ConfigRuleLambdaFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: LambdaRolePolicy
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W58
+            reason: "Permissions are granted, cfn-nag does not recognize"
+          - id: W89
+            reason: "VPC bound lambda is not appropiate for this use case"
+          - id: W92
+            reason: "Reserved concurrency is not appropiate for this use case"
+    Properties:
+      Code:
+        S3Bucket: !Sub "${CodeS3BucketPrefix}-${AWS::Region}"
+        S3Key: !Ref CodeS3Key
+      Handler: "route53/cloudfront-config-proactive-engagement/lambda/check-compliance/index.lambda_handler"
+      Runtime: python3.8
+      Timeout: 30
+      Environment:
+        Variables:
+          checkTags: !Ref CheckTags
+      Role:
+        Fn::GetAtt:
+          - LambdaRole
+          - Arn
+  RemediateLambdaFunction:
+    Type: AWS::Lambda::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W58
+            reason: "Permissions are granted, cfn-nag does not recognize"
+          - id: W89
+            reason: "VPC bound lambda is not appropiate for this use case"
+          - id: W92
+            reason: "Reserved concurrency is not appropiate for this use case"
+    Properties:
+      FunctionName: remediate-health-checks-cloudfront
+      Code:
+        S3Bucket: !Sub "${CodeS3BucketPrefix}-${AWS::Region}"
+        S3Key: !Ref CodeS3Key
+      Handler: "route53/cloudfront-config-proactive-engagement/lambda/remediate/index.lambda_handler"
+      Runtime: python3.9
+      Timeout: 30
+      Environment:
+        Variables:
+          AccountId: !Ref "AWS::AccountId"
+          CodeS3Bucket: !Sub "${CodeS3BucketPrefix}-${AWS::Region}"
+          HC_Regions: !Ref "HealthCheckRegions"
+          snsTopicDetails: !Ref "snsTopicDetails"
+          ALBHealthCheckKey: !Ref "CloudfrontHealthCheckKey"
+          CloudfrontHealthCheckKey: !Ref "CloudfrontHealthCheckKey"
+          EIPEC2HealthCheckKey: !Ref "CloudfrontHealthCheckKey"
+          NLBHealthCheckKey: !Ref "CloudfrontHealthCheckKey"
+      Role:
+        Fn::GetAtt:
+          - LambdaRole
+          - Arn
+  SSMAutomationPermissionToCallLambda:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName:
+        Fn::GetAtt:
+          - RemediateLambdaFunction
+          - Arn
+      Action: "lambda:InvokeFunction"
+      Principal: "ssm.amazonaws.com"
+  ConfigRule:
+    Type: AWS::Config::ConfigRule
+    Properties:
+      ConfigRuleName: cloudfront-proactive-enagement-health-checks
+      Scope:
+        ComplianceResourceTypes:
+          - "AWS::Shield::Protection"
+      Source:
+        Owner: "CUSTOM_LAMBDA"
+        SourceDetails:
+          -
+            EventSource: "aws.config"
+            MessageType: "ConfigurationItemChangeNotification"
+          -
+            EventSource: aws.config
+            MessageType: OversizedConfigurationItemChangeNotification
+        SourceIdentifier:
+          Fn::GetAtt:
+            - ConfigRuleLambdaFunction
+            - Arn
+    DependsOn: ConfigPermissionToCallLambda
+  SSMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+              - ssm.amazonaws.com
+              - config.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AmazonSSMAutomationRole
+      Path: /
+  SSMRolePolicy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: Policy
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - "logs:CreateLogGroup"
+              - "logs:CreateLogStream"
+              - "logs:PutLogEvents"
+            Resource: "arn:aws:logs:*:*:*"
+          - Effect: Allow
+            Action:
+              - "lambda:InvokeFunction"
+            Resource:
+              - !GetAtt RemediateLambdaFunction.Arn
+      Roles:
+        - !Ref SSMRole
+  SSMDocument:
+    Type: AWS::SSM::Document
+    Properties:
+      DocumentType: Automation
+      DocumentFormat: YAML
+      Name: 'proactive-engagement-health-check-cloudfront'
+      Content:
+        description: description
+        schemaVersion: '0.3'
+        assumeRole: !GetAtt SSMRole.Arn
+        parameters:
+          ResourceArn:
+            type: String
+          AutomationAssumeRole:
+            type: String
+            default: ''
+        mainSteps:
+          - name: proactive_engagement_health_check_cloudfront
+            action: 'aws:invokeLambdaFunction'
+            inputs:
+              InvocationType: Event
+              FunctionName: !Ref RemediateLambdaFunction
+              Payload: '"{{ ResourceArn }}"'
+  ConfigRuleRemediationConfiguration:
+      Type: "AWS::Config::RemediationConfiguration"
+      Properties:
+        Automatic: !Ref Remediation
+        ConfigRuleName: !Ref ConfigRule
+        MaximumAutomaticAttempts: 5
+        RetryAttemptSeconds: 15
+        Parameters:
+          ResourceArn:
+            ResourceValue:
+              Value: RESOURCE_ID
+          AutomationAssumeRole:
+            StaticValue:
+              Values:
+                - !GetAtt SSMRole.Arn
+        TargetId: !Ref SSMDocument
+        TargetType: "SSM_DOCUMENT"
+        TargetVersion: "1"

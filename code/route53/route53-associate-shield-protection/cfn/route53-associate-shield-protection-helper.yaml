@@ -6,8 +6,13 @@ Parameters:
     Type: String
     Default: lambda.zip
 Resources:
-  GenerateFMSPolicyLambdaRole:
+  Route53ShieldProtectionManageLambdaRole:
     Type: AWS::IAM::Role
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: "Defining to ensure multi-region gets unique name"
     Properties:
       AssumeRolePolicyDocument:
         Version: 2012-10-17
@@ -19,15 +24,15 @@ Resources:
             Action:
               - 'sts:AssumeRole'
       Path: /
-  GenerateFMSPolicyLambdaPolicy:
+  Route53ShieldProtectionManageLambdaPolicy:
     Type: 'AWS::IAM::Policy'
     Metadata:
       cfn_nag:
         rules_to_suppress:
           - id: W12
-            reason: "Wildcard resources required for waf List/Get permissions"
+            reason: "Access to all shield/route53 resources is required"
     Properties:
-      PolicyName: fms-policy-generator
+      PolicyName: LambdaPolicy
       PolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -39,21 +44,24 @@ Resources:
             Resource: "arn:aws:logs:*:*:*"
           - Effect: Allow
             Action:
-              - "s3:GetObject"
-            Resource: !Sub "arn:aws:s3:::${CodeS3BucketPrefix}*/*"
-          - Effect: Allow
-            Action:
-              - "wafv2:ListRuleGroups"
-              - "wafv2:GetRuleGroup"
+              - "route53:GetHealthCheckCount"
+              - "route53:GetHealthCheck"
+              - "route53:ListHealthChecks"
+              - "shield:AssociateHealthCheck"
+              - "shield:CreateProtection"
+              - "shield:DeleteProtection"
+              - "shield:DescribeDRTAccess"
+              - "shield:DisassociateHealthCheck"
+              - "shield:DescribeProtection"
+              - "shield:GetSubscriptionState"
+              - "shield:ListProtections"
+              - "shield:ListTagsForResource"
             Resource: "*"
-          - Effect: Allow
-            Action: ssm:GetParameter
-            Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/fms-policy-generator-config/*"
       Roles:
-        - !Ref GenerateFMSPolicyLambdaRole
-  GenerateFMSPolicyLambdaFunction:
+        - !Ref Route53ShieldProtectionManageLambdaRole
+  Route53ShieldProtectionManageLambdaFunction:
     Type: AWS::Lambda::Function
-    DependsOn: GenerateFMSPolicyLambdaPolicy
+    DependsOn: Route53ShieldProtectionManageLambdaPolicy
     Metadata:
       cfn_nag:
         rules_to_suppress:
@@ -64,9 +72,9 @@ Resources:
           - id: W92
             reason: "Not appropiate for application use of Lambda"
     Properties:
-      Runtime: python3.7
-      Role: !GetAtt GenerateFMSPolicyLambdaRole.Arn
-      Handler: fms/fms-policy-waf-generator/lambda/index.lambda_handler
+      Runtime: python3.9
+      Role: !GetAtt Route53ShieldProtectionManageLambdaRole.Arn
+      Handler: route53/route53-associate-shield-protection/lambda/index.lambda_handler
       Environment:
         Variables:
           CodeS3BucketPrefix: !Ref CodeS3BucketPrefix
@@ -76,8 +84,7 @@ Resources:
         S3Bucket: !Sub "${CodeS3BucketPrefix}-${AWS::Region}"
         S3Key: !Ref CodeS3Key
 Outputs:
-  FMSPolicyBuilderLambdaArn:
-    Description: Lambda to build FMS policys
-    Value: !GetAtt GenerateFMSPolicyLambdaFunction.Arn
+  Route53ShieldProtectionManageLambdaFunctionArn:
+    Value: !GetAtt Route53ShieldProtectionManageLambdaFunction.Arn
     Export:
-      Name: FMSPolicyBuilderLambdaArn
+      Name: Route53ShieldProtectionManageLambdaFunctionArn

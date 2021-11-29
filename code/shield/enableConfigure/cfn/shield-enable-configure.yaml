@@ -9,7 +9,6 @@ Metadata:
         Parameters:
           - EnabledProactiveEngagement
           - EnableDRTAccess
-          - WAFLogS3Bucket
           - EmergencyContactEmail1
           - EmergencyContactPhone1
           - EmergencyContactEmail2
@@ -109,6 +108,7 @@ Resources:
             - shield:CreateSubscription
             - shield:UpdateSubscription
             - shield:AssociateDRTRole
+            - shield:DescribeDRTAccess
             - shield:EnableProactiveEngagement
             - shield:DisableProactiveEngagement
             - shield:AssociateProactiveEngagementDetails
@@ -141,7 +141,7 @@ Resources:
     Properties:
       Runtime: python3.9
       Role: !GetAtt ConfigureShieldLambdaRole.Arn
-      Handler: shield/lambda/enableConfigure/index.lambda_handler
+      Handler: shield/enableConfigure/lambda/index.lambda_handler
       Code:
         S3Bucket: !Sub "${CodeS3BucketPrefix}-${AWS::Region}"
         S3Key: !Ref CodeS3Key

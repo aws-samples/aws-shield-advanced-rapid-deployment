@@ -17,7 +17,7 @@ Resources:
       cfn_nag:
         rules_to_suppress:
           - id: W28
-            reason: "Role must have same name for wildcard resource policies to reference programatically"
+            reason: "Role name to be referenced from other stacks, replace if ever required would not break things"
     Properties:
       RoleName: KinesisFirehoseWafDeliveryRole
       AssumeRolePolicyDocument:

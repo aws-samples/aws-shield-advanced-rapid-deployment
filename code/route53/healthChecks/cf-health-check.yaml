@@ -1,0 +1,269 @@
+---
+AWSTemplateFormatVersion: 2010-09-09
+Parameters:
+  resourceArn:
+    Type: String
+  probeFQDN:
+    Type: String
+  probeSearchString:
+    Type: String
+    Default: ''
+  probeResourcePath:
+    Type: String 
+    Default: <na>
+    Description: Optional - Specify for Route 53 Probe health check to target a specific path other than the root site
+  probeType:
+    Type: String
+    Default: HTTPS
+    AllowedValues:
+      - HTTPS
+      - HTTP
+      - HTTPSTRMATCH
+      - HTTPSSTRMATCH
+  probePort:
+    Type: String
+    Default: <na>
+    Description: HTTPS/HTTPSSTRMATCH uses 443, HTTP/HTTPSTRMATCH uses 80 unless otherwise specified here
+  probeHealthCheckRegions:
+    Type: CommaDelimitedList
+    Default: us-east-1,us-west-2,eu-west-1
+    Description: "Comma separated list of regions to complete Route 53 health checks from list of us-east-1, us-west-1, us-west-2, eu-west-1, ap-southeast-1, ap-southeast-2, ap-northeast-1, sa-east-1"
+  SNSTopicNotifications:
+    Type: String
+    Default: <na>
+  Metric1Name:
+    Type: String
+    Default: 4xxErrorRate
+  Metric2Name:
+    Type: String
+    Default: 5xxErrorRate
+  Metric3Name:
+    Type: String
+    Default: OriginLatency
+  Metric1Threshold:
+    Type: Number
+    Default: 0.05
+    MinValue: 0
+  Metric2Threshold:
+    Type: Number
+    Default: 0.05
+    MinValue: 0
+  Metric3Threshold:
+    Type: Number
+    Default: 1
+    MinValue: 0
+  Metric1Statistic:
+    Type: String
+    Default: Average
+    AllowedValues:
+      - Average
+      - Sum
+      - Minimum
+      - Maximum
+  Metric2Statistic:
+    Type: String
+    Default: Average
+    AllowedValues:
+      - Average
+      - Sum
+      - Minimum
+      - Maximum
+  Metric3Statistic:
+    Type: String
+    Default: Average
+    AllowedValues:
+      - Average
+      - Sum
+      - Minimum
+      - Maximum
+Conditions:
+  AlarmActionFlag: !Not [!Equals [!Ref SNSTopicNotifications, '<na>']]
+  SearchStringFlag: !Or [!Equals [!Ref probeType, 'HTTPSSTRMATCH'],!Equals [!Ref probeType, 'HTTPSTRMATCH']]
+  ProbePathFlag: !Not [!Equals [!Ref probeResourcePath, '<na>']]
+  probePortFlag: !Not [!Equals [!Ref probePort, '<na>']]
+Mappings: 
+  ProbeMap: 
+    Port: 
+      "HTTPS": "443"
+      "HTTP": "80"
+      "HTTPSSTRMATCH": "443"
+      "HTTPSTRMATCH": "80"
+    probeTypeMap:
+      "HTTPS": "HTTPS"
+      "HTTP": "HTTP"
+      "HTTPSSTRMATCH": "HTTPS_STR_MATCH"
+      "HTTPSTRMATCH": "HTTP_STR_MATCH"
+    SNIEnabled:
+      "HTTPS": True
+      "HTTP": False
+      "HTTPSSTRMATCH": True
+      "HTTPSTRMATCH": False
+      
+Resources:
+  DDOSAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: "Alarm has a dynamically generated name unique per resources"    
+    Properties:
+      AlarmName: !Join ["-", [DDosDetected, !Select [1,!Split ["/",!Ref resourceArn]]]]
+      ActionsEnabled: True
+      AlarmActions:
+      - !If [AlarmActionFlag, !Ref SNSTopicNotifications, !Ref "AWS::NoValue"]
+      MetricName: DDoSDetected
+      Namespace: AWS/DDoSProtection
+      Statistic: Sum
+      Dimensions:
+      - Name: DistributionId
+        Value: !Select [1,!Split ["/",!Ref resourceArn]]
+      Period: 60
+      EvaluationPeriods: 20
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+  Metric1HealthCheck:
+    Type: 'AWS::Route53::HealthCheck'
+    Properties: 
+      HealthCheckConfig:
+        Type: CLOUDWATCH_METRIC
+        AlarmIdentifier:
+          Region: !Ref AWS::Region
+          Name: !Ref Alarm1
+      HealthCheckTags:
+      - Key: Name
+        Value: !Join ["-", [!Ref Metric1Name, !Select [1,!Split ["/",!Ref resourceArn]]]]
+  Alarm1:
+    Type: AWS::CloudWatch::Alarm
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: "Alarm has a dynamically generated name unique per resources"    
+    Properties:
+      AlarmName: !Join ["-", [!Ref Metric1Name, !Select [1,!Split ["/",!Ref resourceArn]]]]
+      ActionsEnabled: True
+      AlarmActions:
+      - !If [AlarmActionFlag, !Ref SNSTopicNotifications, !Ref "AWS::NoValue"]
+      MetricName: !Ref Metric1Name
+      Namespace: AWS/CloudFront
+      Statistic: !Ref Metric1Statistic
+      Dimensions:
+      - Name: DistributionId
+        Value: !Select [1,!Split ["/",!Ref resourceArn]]
+      Period: 60
+      EvaluationPeriods: 20
+      DatapointsToAlarm: 1
+      Threshold: !Ref Metric1Threshold
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+  Metric2HealthCheck: 
+    Type: 'AWS::Route53::HealthCheck'
+    Properties: 
+      HealthCheckConfig:
+        Type: CLOUDWATCH_METRIC
+        AlarmIdentifier:
+          Region: !Ref AWS::Region
+          Name: !Ref Alarm2
+      HealthCheckTags:
+      - Key: Name
+        Value: !Join ["-", [!Ref Metric2Name, !Select [1,!Split ["/",!Ref resourceArn]]]]
+  Alarm2:
+    Type: AWS::CloudWatch::Alarm
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: "Alarm has a dynamically generated name unique per resources"    
+    Properties:
+      AlarmName: !Join ["-", [!Ref Metric2Name, !Select [1,!Split ["/",!Ref resourceArn]]]]
+      ActionsEnabled: True
+      AlarmActions:
+      - !If [AlarmActionFlag, !Ref SNSTopicNotifications, !Ref "AWS::NoValue"]
+      MetricName: DDoSDetected
+      Namespace: AWS/DDosProtection
+      Statistic: !Ref Metric2Statistic
+      Dimensions:
+      - Name: DistributionId
+        Value: !Select [1,!Split ["/",!Ref resourceArn]]
+      Period: 60
+      EvaluationPeriods: 20
+      DatapointsToAlarm: 1
+      Threshold: !Ref Metric2Threshold
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+  Metric3HealthCheck:
+    Type: 'AWS::Route53::HealthCheck'
+    Properties: 
+      HealthCheckConfig:
+        Type: CLOUDWATCH_METRIC
+        AlarmIdentifier:
+          Region: !Ref AWS::Region
+          Name: !Ref Alarm3
+      HealthCheckTags:
+      - Key: Name
+        Value: !Join ["-", [!Ref Metric3Name, !Select [1,!Split ["/",!Ref resourceArn]]]]
+  Alarm3:
+    Type: AWS::CloudWatch::Alarm
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: "Alarm has a dynamically generated name unique per resources"    
+    Properties:
+      AlarmName: !Join ["-", [!Ref Metric3Name, !Select [1,!Split ["/",!Ref resourceArn]]]]
+      ActionsEnabled: True
+      AlarmActions:
+      - !If [AlarmActionFlag, !Ref SNSTopicNotifications, !Ref "AWS::NoValue"]
+      MetricName: !Ref Metric3Name
+      Namespace: AWS/CloudFront
+      Statistic: !Ref Metric3Statistic
+      Dimensions:
+      - Name: DistributionId
+        Value: !Select [1,!Split ["/",!Ref resourceArn]]
+      Period: 60
+      EvaluationPeriods: 20
+      DatapointsToAlarm: 1
+      Threshold: !Ref Metric3Threshold
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+  ProbeHealthCheck: 
+    Type: AWS::Route53::HealthCheck
+    Properties: 
+      HealthCheckConfig:
+          Type: !FindInMap [ProbeMap, "probeTypeMap", !Ref probeType]
+          ResourcePath: !If [ProbePathFlag, !Ref probeResourcePath, !Ref "AWS::NoValue"]
+          FullyQualifiedDomainName: !Ref probeFQDN
+          SearchString: !If [SearchStringFlag, !Ref probeSearchString, !Ref "AWS::NoValue"]
+          Port: !If [probePortFlag,!Ref probePort,!FindInMap [ProbeMap,"Port", !Ref probeType]]
+          EnableSNI: !FindInMap [ProbeMap, "SNIEnabled", !Ref probeType]
+          Regions:
+            !Ref probeHealthCheckRegions
+      HealthCheckTags:
+      - Key: Name
+        Value: !Join ["-", ["Probe", !Select [1,!Split ["/",!Ref resourceArn]]]]
+  CalculatedHealthCheck: 
+    Type: 'AWS::Route53::HealthCheck'
+    Properties: 
+      HealthCheckConfig:
+        Type: CALCULATED
+        HealthThreshold: 3
+        ChildHealthChecks:
+        - !Ref Metric1HealthCheck
+        - !Ref Metric2HealthCheck
+        - !Ref Metric3HealthCheck
+        - !Ref ProbeHealthCheck
+      HealthCheckTags:
+      - Key: Name
+        Value: !Join ["-", ["CalculatedHC", !Select [1,!Split ["/",!Ref resourceArn]]]]
+  ShieldAssociation:
+    Type: Custom::ShieldProtectionHealthCheck
+    Properties:
+      ServiceToken: !ImportValue Route53ShieldProtectionManageLambdaFunctionArn
+      ResourceArn: !Ref resourceArn
+      CalculatedHCId: !Ref CalculatedHealthCheck
+Outputs:
+  CalculatedHealthCheckId:
+    Value: !Ref CalculatedHealthCheck

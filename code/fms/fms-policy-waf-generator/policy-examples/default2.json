@@ -1,0 +1,89 @@
+{
+  "preProcessRuleGroups": [
+    {
+      "ruleGroupArn": null,
+      "overrideAction": {
+        "type": "COUNT"
+      },
+      "managedRuleGroupIdentifier": {
+        "version": null,
+        "vendorName": "AWS",
+        "managedRuleGroupName": "AWSManagedRulesCommonRuleSet"
+      },
+      "ruleGroupType": "ManagedRuleGroup",
+      "excludeRules": [],
+      "sampledRequestsEnabled": true
+    },
+    {
+      "ruleGroupArn": null,
+      "overrideAction": {
+        "type": "COUNT"
+      },
+      "managedRuleGroupIdentifier": {
+        "version": null,
+        "vendorName": "AWS",
+        "managedRuleGroupName": "AWSManagedRulesKnownBadInputsRuleSet"
+      },
+      "ruleGroupType": "ManagedRuleGroup",
+      "excludeRules": [],
+      "sampledRequestsEnabled": true
+    },
+    {
+      "ruleGroupArn": null,
+      "overrideAction": {
+        "type": "COUNT"
+      },
+      "managedRuleGroupIdentifier": {
+        "version": null,
+        "vendorName": "AWS",
+        "managedRuleGroupName": "AWSManagedRulesAmazonIpReputationList"
+      },
+      "ruleGroupType": "ManagedRuleGroup",
+      "excludeRules": [],
+      "sampledRequestsEnabled": true
+    },
+    {
+      "ruleGroupArn": null,
+      "overrideAction": {
+        "type": "COUNT"
+      },
+      "managedRuleGroupIdentifier": {
+        "version": null,
+        "vendorName": "AWS",
+        "managedRuleGroupName": "AWSManagedRulesBotControlRuleSet"
+      },
+      "ruleGroupType": "ManagedRuleGroup",
+      "excludeRules": [],
+      "sampledRequestsEnabled": true
+    },
+    {
+      "ruleGroupArn": null,
+      "overrideAction": {
+        "type": "COUNT"
+      },
+      "managedRuleGroupIdentifier": {
+        "version": null,
+        "vendorName": "AWS",
+        "managedRuleGroupName": "AWSManagedRulesAnonymousIpList"
+      },
+      "ruleGroupType": "ManagedRuleGroup",
+      "excludeRules": [],
+      "sampledRequestsEnabled": true
+    },
+    {
+      "ruleGroupArn": [
+        "global",
+        "rate-limit-cloudfront"
+      ],
+      "overrideAction": {
+        "type": "COUNT"
+      },
+      "managedRuleGroupIdentifier": null,
+      "ruleGroupType": "RuleGroup",
+      "excludeRules": [],
+      "sampledRequestsEnabled": true
+    }
+  ],
+  "postProcessRuleGroups": [],
+  "redactedFields": []
+}

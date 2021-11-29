@@ -1,5 +1,5 @@
 import sys
-sys.path.insert(0,'./shield/lambda/enableShieldAdv')
+sys.path.insert(0,'./shield/enableConfigure/lambda')
 import json
 import boto3
 import os
@@ -56,6 +56,8 @@ def lambda_handler(event, context):
         responseData = {}
         responseData['Error'] = "KeyError for: " + error
         cfnresponse.send(event, context, cfnresponse.FAILED, responseData, "BuildContactListFailed")
+        return ()
+
     #Activate Shield Subscription
     #Create DRT Role if needed
     try:
@@ -85,6 +87,7 @@ def lambda_handler(event, context):
             return ()
     #Ensure DRT Policy Attached to Role
     try:
+        logger.info("Listing attached role policies for AWSDRTAccess role.")
         iam_response = iam_client.list_attached_role_policies(
             RoleName='AWSDRTAccess'
             )
@@ -92,7 +95,7 @@ def lambda_handler(event, context):
         for p in iam_response['AttachedPolicies']:
             policyList.append(p['PolicyName'])
         if 'AWSShieldDRTAccessPolicy' not in policyList:
-            print ("Required Policy not attached to role, attaching")
+            logger.info("Required Policy not attached to role, attaching")
             response = iam_client.attach_role_policy(
                 RoleName='AWSDRTAccess',
                 PolicyArn='arn:aws:iam::aws:policy/service-role/AWSShieldDRTAccessPolicy'
@@ -100,65 +103,74 @@ def lambda_handler(event, context):
         else:
             logger.debug ("Required Policy Already attached")
     except botocore.exceptions.ClientError as error:
-        logger.error(error.response['Error'])
+        logger.error(error)
         responseData['Error'] = error.response['Error']
         cfnresponse.send(event, context, cfnresponse.FAILED, responseData, "DRTRolePolicyConfigFailed")
         return ()
+
     if enableDRTAccess == 'true':
         try:
+            logger.info("Associating DRT role.")
             shield_response = shield_client.associate_drt_role(
                 RoleArn=roleArn
                 )
         except botocore.exceptions.ClientError as error:
-            logger.error(error.response['Error'])
+            logger.error(error)
             responseData['Error'] = error.response['Error']
             cfnresponse.send(event, context, cfnresponse.FAILED, responseData, "DRTEnablementFailed")
             return ()
     else:
         try:
+            logger.info("Describing DRT access.")
             shield_drt_response = shield_client.describe_drt_access()
-            if 'RoleArn' in shield_response:
+            if 'RoleArn' in shield_drt_response:
+                logger.info("Disassociating DRT role.")
                 shield_drt_response = shield_client.disassociate_drt_role()
         except botocore.exceptions.ClientError as error:
-            logger.error(error.response['Error'])
+            logger.error(error)
             responseData['Error'] = error.response['Error']
             cfnresponse.send(event, context, cfnresponse.FAILED, responseData, "DRTDisableFailed")
             return ()
+
     try:
+        logger.info("Updating emergency contact settings.")
         shield_response = shield_client.update_emergency_contact_settings(
             EmergencyContactList=emergencyContactList
             )
         logger.debug(shield_response)
     except botocore.exceptions.ClientError as error:
-        logger.error(error.response['Error'])
+        logger.error(error)
         responseData['Error'] = error.response['Error']
         cfnresponse.send(event, context, cfnresponse.FAILED, responseData, "EmergencyContactUpdateFailed")
         return ()
+
     if enabledProactiveEngagement == 'true':
-        logger.debug("Enabling Proactive  Details")
         try:
+            logger.info("Enabling proactive engagement.")
             shield_response = shield_client.enable_proactive_engagement()
+            logger.info("Associating proactive engagement details.")
             shield_client.associate_proactive_engagement_details(
                 EmergencyContactList=emergencyContactList)
         except botocore.exceptions.ClientError as error:
             if error.response['Error']['Code'] == 'InvalidOperationException':
-                logger.info ("ProactiveEngagementAlreadyEnabled")
+                logger.info("ProactiveEngagementAlreadyEnabled")
             elif error.response['Error']['Code'] == 'InvalidParameterException':
-                logger.info ("Error Enabling Proactive Support, continue regardless")
+                logger.info("Error Enabling Proactive Support, continue regardless")
             else:
-                logger.debug('enable_proactive_engagement')
-                logger.error(error.response['Error'])
+                logger.error(error)
                 responseData['Error'] = error.response['Error']
                 cfnresponse.send(event, context, cfnresponse.FAILED, responseData, "ProactiveEngagementEnableFailed")
                 return ()
     else:
         try:
+            logger.info("Disabling proactive engagement.")
             shield_response = shield_client.disable_proactive_engagement()
         except botocore.exceptions.ClientError as error:
-            logger.error(error.response['Error'])
+            logger.error(error)
             responseData['Error'] = error.response['Error']
             cfnresponse.send(event, context, cfnresponse.FAILED, responseData, "ProactiveEngagementEnableFailed")
             return ()
+
     responseData = {}
     cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData, "ConfigureShieldAdvancedSucceesful")
     return()

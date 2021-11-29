@@ -1,0 +1,189 @@
+AWSTemplateFormatVersion: 2010-09-09
+Parameters:
+  TopicName:
+    Type: String
+    Default: defaultSROBAlerts
+  SubscriptionEmail:
+    Type: String
+    Default: <na>
+  ScheduleExpression:
+    Type: String
+    Default: rate(12 hours)
+Conditions:
+  SubscriptionProvided: !Not [!Equals [!Ref SubscriptionEmail, "<na>"]]
+Resources:
+  SNSTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      KmsMasterKeyId: !GetAtt KMSKey.Arn
+      Subscription:
+        !If
+          - SubscriptionProvided
+          -
+            - Endpoint: !Ref SubscriptionEmail
+              Protocol: "email"
+          - !Ref AWS::NoValue
+      TopicName: !Ref TopicName
+  KMSKey:
+    Type: "AWS::KMS::Key"
+    Properties:
+      Description: SNS Topic KMS Key
+      EnableKeyRotation: true
+      PendingWindowInDays: 30
+      KeyPolicy:
+        Version: 2012-10-17
+        Id: key-default-1
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${AWS::AccountId}:root"
+            Action: "kms:*"
+            Resource: "*"
+          - Effect: Allow
+            Principal:
+              Service:
+              - cloudwatch.amazonaws.com
+            Action:
+            - "kms:Decrypt"
+            - "kms:GenerateDataKey*"
+            Resource: "*"
+  RateEvent:
+    DependsOn: OrgSNSCloudwatchAccessLambdaPolicy
+    Type: 'AWS::Events::Rule'
+    Properties:
+      Description: UpdateSNSTopicPolicyForAllAccountCloudWatchAlarm
+      Name: SNSPolicyBuilder
+      ScheduleExpression: !Ref ScheduleExpression
+      Targets:
+        - Arn: !GetAtt  OrgSNSCloudwatchAccessLambda.Arn
+          Id: OrgSNSCloudwatchAccessPolicyBuild
+  OrgSNSCloudwatchAccessEventPermissions:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      FunctionName: !GetAtt  OrgSNSCloudwatchAccessLambda.Arn
+      Action: 'lambda:InvokeFunction'
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt RateEvent.Arn
+  OrgSNSCloudwatchAccessLambdaRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+  OrgSNSCloudwatchAccessLambdaPolicy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: LocalPolicy
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'logs:CreateLogGroup'
+              - 'logs:CreateLogStream'
+              - 'logs:PutLogEvents'
+            Resource: 'arn:aws:logs:*:*:*'
+          - Effect: Allow
+            Action:
+              #- "iam:PassRole"
+              - "organizations:ListAccounts"
+              - "sns:SetTopicAttributes"
+              - 'sns:GetTopicAttributes'
+            Resource: !Ref SNSTopic
+      Roles:
+        - !Ref  OrgSNSCloudwatchAccessLambdaRole
+  OrgSNSCloudwatchAccessLambda:
+    Type: 'AWS::Lambda::Function'
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W58
+            reason: "Wildcard permissions for Athena needed"
+          - id: W89
+            reason: "VPC bound lambda is not appropiate for this use case"
+          - id: W92
+            reason: "Reserved concurrency is not appropiate for this use case"
+    Properties:
+      Runtime: python3.8
+      Role: !GetAtt  OrgSNSCloudwatchAccessLambdaRole.Arn
+      Handler: index.lambda_handler
+      Timeout: 30
+      Environment:
+        Variables:
+          snsTopicArn: !Ref SNSTopic
+      Code:
+        ZipFile: |
+            import boto3, json, os
+            snsTopicArn = os.environ['snsTopicArn']
+            sns_client = boto3.client('sns')
+            org_client = boto3.client('organizations')
+            paginator = org_client.get_paginator('list_accounts')
+            
+            def lambda_handler(event, context):
+                snsAccountID = snsTopicArn.split(":")[3]
+                policy = {
+                    "Version": "2008-10-17",
+                    "Id": "CloudWatchOrgAccounts",
+                    "Statement": [
+                        {
+                          "Sid": "__default_statement_ID",
+                          "Effect": "Allow",
+                          "Principal": {
+                            "AWS": "*"
+                          },
+                          "Action": [
+                            "SNS:GetTopicAttributes",
+                            "SNS:SetTopicAttributes",
+                            "SNS:AddPermission",
+                            "SNS:RemovePermission",
+                            "SNS:DeleteTopic",
+                            "SNS:Subscribe",
+                            "SNS:ListSubscriptionsByTopic",
+                            "SNS:Publish",
+                            "SNS:Receive"
+                          ],
+                          "Resource": snsTopicArn,
+                          "Condition": {
+                            "StringEquals": {
+                              "AWS:SourceOwner": snsAccountID
+                            }
+                          }
+                        },
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "AWS": "*"
+                            },
+                            "Action": "SNS:Publish",
+                            "Resource": snsTopicArn,
+                            "Condition": {
+                                "ArnLike": {
+                                    "aws:SourceArn": []
+                                }
+                            }
+                        }
+                    ]
+                }
+                r = sns_client.get_topic_attributes(
+                    TopicArn=snsTopicArn
+                )
+                arnList = []
+                org_response = (paginator.paginate().build_full_result())['Accounts']
+                for a in org_response:
+                    accountId =  (a['Arn'].split('/')[-1])
+                    arnList.append("arn:aws:cloudwatch:" + os.environ['AWS_REGION'] + ":" +  accountId + ":alarm:*")
+                policy['Statement'][1]['Condition']['ArnLike']['aws:SourceArn'] = arnList
+                print (json.dumps(policy))
+                sns_client.set_topic_attributes(
+                    TopicArn=snsTopicArn,
+                    AttributeName="Policy",
+                    AttributeValue=json.dumps(policy)
+                )
+                    

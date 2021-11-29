@@ -23,6 +23,9 @@ Parameters:
     AllowedValues:
       - Include
       - Exclude
+  PolicyName:
+    Type: String
+    Default: RegionalDefaultWAFPolicy
   WebACLPolicyIdentifier:
     Type: String
     Default: AWSDefaultWAFRule
@@ -100,6 +103,7 @@ Resources:
     Properties:
       ServiceToken: !ImportValue FMSPolicyBuilderLambdaArn
       wafRuleKey: !Ref WAFRuleKey
+      ManagedServiceDataTemplate: !Sub "/fms-policy-generator-config/${PolicyName}"
       OverrideCustomerWebACLAssociation: !Ref OverrideCustomerWebACL
       DefaultAction: !Ref DefaultAction
   FMSWAFPolicy:
@@ -110,6 +114,9 @@ Resources:
       ResourceType: ResourceTypeList
       ResourceTypeList: !Split [",", !Ref WebACLResourceTypes]
       PolicyName: !Ref WebACLPolicyIdentifier
+      Tags:
+        - Key: User
+          Value: !Ref PolicyName
       IncludeMap:
         ORGUNIT:
           !If [IncludeScopeFlag, !If [OUScopeFlag, !Ref OUScopeList, !Ref "AWS::NoValue"], !Ref "AWS::NoValue"]
@@ -127,7 +134,7 @@ Resources:
         ManagedServiceData: !GetAtt GenerateFMSPolicyCFN.Template
       #ResourceTags:
       ResourceTags:
-        !If 
+        !If
         - ScopeTagName1Flag
         -
           - !If

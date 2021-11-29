@@ -1,0 +1,100 @@
+---
+AWSTemplateFormatVersion: 2010-09-09
+Parameters:
+  CodeS3BucketPrefix:
+    Type: String
+  CodeS3Key:
+    Type: String
+    Default: lambda.zip
+  AdminAccountId:
+    Type: String
+Resources:
+  ConfigureFmsLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+              - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+  ConfigureFmsLambdaPolicy:
+    Type: AWS::IAM::Policy
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W12
+            reason: "Organization describe, register and enable only, FMS associateAdmin only Supports wildcard as resource"
+          - id: W58
+            reason: "Permissions are granted, cfn-nag does not recognize"
+          - id: W89
+            reason: "VPC bound lambda is not appropiate for this use case"
+          - id: W92
+            reason: "Reserved concurrency is not appropiate for this use case"
+    Properties:
+      PolicyName: ConfigureFmsLambdaPolicy
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+            - organizations:DescribeOrganization
+            - organizations:DescribeAccount
+            Resource: '*'
+          - Sid: AllowOnlyFMSEnable
+            Effect: Allow
+            Action:
+            - organizations:RegisterDelegatedAdministrator
+            - organizations:EnableAWSServiceAccess
+            Resource: '*'
+            Condition:
+              StringLikeIfExists:
+                organizations:ServicePrincipal:
+                - fms.amazonaws.com
+          - Effect: Allow
+            Action:
+            - fms:AssociateAdminAccount
+            Resource: '*'
+          - Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            Resource:
+            - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${ConfigureFmsLambdaFunction}"
+            - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${ConfigureFmsLambdaFunction}:*"
+          - Effect: Allow
+            Action:
+            - logs:PutLogEvents
+            Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${ConfigureFmsLambdaFunction}:log-stream:*"
+      Roles:
+        - !Ref ConfigureFmsLambdaRole
+  ConfigureFmsAdminAccount:
+    DependsOn: ConfigureFmsLambdaPolicy
+    Type: Custom::ConfigureFmsAdminAccount
+    Properties:
+      ServiceToken: !GetAtt ConfigureFmsLambdaFunction.Arn
+  ConfigureFmsLambdaFunction:
+    Type: AWS::Lambda::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W58
+            reason: "Permissions are granted, cfn-nag does not recognize"
+          - id: W89
+            reason: "VPC bound lambda is not appropiate for this use case"
+          - id: W92
+            reason: "Reserved concurrency is not appropiate for this use case"
+    Properties:
+      Runtime: python3.9
+      Role: !GetAtt ConfigureFmsLambdaRole.Arn
+      Handler: fms/enableConfigure/lambda/index.lambda_handler
+      Code:
+        S3Bucket: !Sub "${CodeS3BucketPrefix}-${AWS::Region}"
+        S3Key: !Ref CodeS3Key
+      Environment:
+        Variables:
+          AdminAccountId: !Ref AdminAccountId

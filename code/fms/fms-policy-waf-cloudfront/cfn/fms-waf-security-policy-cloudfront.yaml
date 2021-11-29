@@ -2,7 +2,7 @@ AWSTemplateFormatVersion: 2010-09-09
 Parameters:
   WAFRuleKey:
     Type: String
-    Default: fms/policies/default.json
+    Default: code/fms/fms-policy-waf-generator/policy-examples/default.json
   DefaultAction:
     Type: String
     Default: ALLOW
@@ -23,9 +23,9 @@ Parameters:
     AllowedValues:
       - Include
       - Exclude
-  WebACLPolicyIdentifier:
+  PolicyName:
     Type: String
-    Default: AWSDefaultWAFRule
+    Default: CloudFrontDefaultWAFPolicy
   ScopeType:
     Type: String
     Description: "Should Firewall Manager Policies be scoped to the entire org (root) or a specific list of OUs (OU)"
@@ -78,6 +78,9 @@ Parameters:
   ScopeTagValue3:
     Type: String
     Default: <na>
+  SSMParameterVersion:
+    Type: String
+    Default: Latest
 Conditions:
   ScopeTagName1Flag: !Not [!Equals [!Ref ScopeTagName1, "<na>"]]
   ScopeTagName2Flag: !Not [!Equals [!Ref ScopeTagName2, "<na>"]]
@@ -92,12 +95,23 @@ Conditions:
   IncludeScopeFlag: !Equals [!Ref IncludeExcludeScope, "Include"]
   ExcludeScopeFlag: !Equals [!Ref IncludeExcludeScope, "Exclude"]
 Resources:
+  SSMParameterPolicyConfig:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/fms-policy-generator-config/${PolicyName}"
+      Type: String
+      Value: |
+        {"type":"WAFV2","preProcessRuleGroups":[{"ruleGroupArn":null,"overrideAction":{"type":"COUNT"},"managedRuleGroupIdentifier":{"version":null,"vendorName":"AWS","managedRuleGroupName":"AWSManagedRulesCommonRuleSet"},"ruleGroupType":"ManagedRuleGroup","excludeRules":[],"sampledRequestsEnabled":true},{"ruleGroupArn":null,"overrideAction":{"type":"COUNT"},"managedRuleGroupIdentifier":{"version":null,"vendorName":"AWS","managedRuleGroupName":"AWSManagedRulesKnownBadInputsRuleSet"},"ruleGroupType":"ManagedRuleGroup","excludeRules":[],"sampledRequestsEnabled":true},{"ruleGroupArn":null,"overrideAction":{"type":"COUNT"},"managedRuleGroupIdentifier":{"version":null,"vendorName":"AWS","managedRuleGroupName":"AWSManagedRulesAmazonIpReputationList"},"ruleGroupType":"ManagedRuleGroup","excludeRules":[],"sampledRequestsEnabled":true},{"ruleGroupArn":null,"overrideAction":{"type":"COUNT"},"managedRuleGroupIdentifier":{"version":null,"vendorName":"AWS","managedRuleGroupName":"AWSManagedRulesBotControlRuleSet"},"ruleGroupType":"ManagedRuleGroup","excludeRules":[],"sampledRequestsEnabled":true},{"ruleGroupArn":null,"overrideAction":{"type":"COUNT"},"managedRuleGroupIdentifier":{"version":null,"vendorName":"AWS","managedRuleGroupName":"AWSManagedRulesAnonymousIpList"},"ruleGroupType":"ManagedRuleGroup","excludeRules":[],"sampledRequestsEnabled":true}],"postProcessRuleGroups":[],"defaultAction":{"type":"ALLOW"},"overrideCustomerWebACLAssociation":false,"loggingConfiguration":{"logDestinationConfigs":["firehosear"],"redactedFields":[],"loggingFilterConfigs":null},"sampledRequestsEnabledForDefaultActions":true}
+      Tags:
+        Application: fms-policy-waf-generator
   GenerateFMSPolicyCFN:
+    DependsOn: SSMParameterPolicyConfig
     Type: Custom::GenerateFMSPolicy
     Properties:
       ServiceToken: !ImportValue FMSPolicyBuilderLambdaArn
-      wafRuleKey: !Ref WAFRuleKey
+      ManagedServiceDataTemplate: !Sub "/fms-policy-generator-config/${PolicyName}"
       OverrideCustomerWebACLAssociation: !Ref OverrideCustomerWebACL
+      SSMParameterVersion: !Ref "SSMParameterVersion"
       DefaultAction: !Ref DefaultAction
   FMSWAFPolicy:
     Condition: CreatePolicyFlag
@@ -105,7 +119,10 @@ Resources:
     Properties:
       ExcludeResourceTags: !If [ExcludeResourceTagFlag, true, false]
       ResourceType: AWS::CloudFront::Distribution
-      PolicyName: !Ref WebACLPolicyIdentifier
+      PolicyName: !Ref PolicyName
+      Tags:
+        - Key: User
+          Value: !Ref PolicyName
       IncludeMap:
         ORGUNIT:
           !If [IncludeScopeFlag, !If [OUScopeFlag, !Ref OUScopeList, !Ref "AWS::NoValue"], !Ref "AWS::NoValue"]
@@ -123,7 +140,7 @@ Resources:
         ManagedServiceData: !GetAtt GenerateFMSPolicyCFN.Template
       #ResourceTags:
       ResourceTags:
-        !If 
+        !If
         - ScopeTagName1Flag
         -
           - !If
