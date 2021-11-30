@@ -51,9 +51,7 @@ Resources:
   KMSKey:
     Type: 'AWS::KMS::Key'
     Properties:
-      Description: RSA-3072 asymmetric KMS key for signing and verification
-      KeySpec: RSA_3072
-      KeyUsage: SIGN_VERIFY
+      Description: WAF Log Key
       KeyPolicy:
         Version: 2012-10-17
         Id: key-default-1
