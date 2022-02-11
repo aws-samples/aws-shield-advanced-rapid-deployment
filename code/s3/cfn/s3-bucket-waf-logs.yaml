@@ -1,21 +1,63 @@
 AWSTemplateFormatVersion: 2010-09-09
 Parameters:
-    WAFLogS3BucketPrefix:
-        Type: String
-        Default: central-waf-logs
-    AWSOrgId:
-        Type: String
-    SourceRoleName:
-        Type: String
-        Default: KinesisFirehoseWafDeliveryRole
+  WAFLogS3BucketPrefix:
+    Type: String
+    Default: central-waf-logs
+  AWSOrgId:
+    Type: String
+  SourceRoleName:
+    Type: String
+    Default: KinesisFirehoseWafDeliveryRole
+  S3LoggingBucketName:
+    Type: String
+    Default: <Generated>
+Conditions:
+  CreateLoggingBucket: !Equals [!Ref S3LoggingBucketName, "<Generated>" ]
+  UseInputLoggingBucket: !Not [!Equals [ !Ref S3LoggingBucketName, "<Generated>" ] ]
 Resources:
+  LoggingS3Bucket:
+    Condition: CreateLoggingBucket
+    Type: "AWS::S3::Bucket"
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub "s3-access-logs-${AWS::AccountId}-${AWS::Region}"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerPreferred
+  LoggingS3BucketPolicy:
+    Condition: CreateLoggingBucket
+    Type: "AWS::S3::BucketPolicy"
+    Properties:
+      Bucket: !Ref LoggingS3Bucket
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: logging.s3.amazonaws.com
+            Action:
+              - s3:PutObject
+            Resource: !Sub "${LoggingS3Bucket.Arn}/*"
+            Condition:
+              ArnLike:
+                aws:SourceARN: !GetAtt WAFLogsS3Bucket.Arn
+              StringEquals:
+                aws:SourceAccount: !Ref "AWS::AccountId"
+          - Effect: Deny
+            Action: s3:*
+            Resource:
+              - !Sub "${LoggingS3Bucket.Arn}/*"
+              - !GetAtt LoggingS3Bucket.Arn
+            Condition:
+              Bool:
+                aws:SecureTransport: 'false'
+            Principal: "*"
   WAFLogsS3Bucket:
     Type: "AWS::S3::Bucket"
-    Metadata:
-      cfn_nag:
-        rules_to_suppress:
-          - id: W35
-            reason: "Not realistic given we would need to create another bucket that does not have this enabled as well"
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
     Properties:
@@ -25,10 +67,13 @@ Resources:
           - ServerSideEncryptionByDefault:
               SSEAlgorithm: aws:kms
               KMSMasterKeyID: !Ref KMSKey
+      LoggingConfiguration:
+        DestinationBucketName: !If [ UseInputLoggingBucket, !Ref S3LoggingBucketName, !Ref "AWS::NoValue" ]
+        DestinationBucketName: !If [ CreateLoggingBucket, !Ref LoggingS3Bucket, !Ref "AWS::NoValue" ]
       OwnershipControls:
         Rules:
           - ObjectOwnership: BucketOwnerPreferred
-  S3BucketPolicy:
+  WAFLogsS3BucketPolicy:
     Type: "AWS::S3::BucketPolicy"
     Properties:
       Bucket: !Ref WAFLogsS3Bucket
@@ -36,7 +81,7 @@ Resources:
         Statement:
           - Effect: Allow
             Principal:
-              AWS: !Sub "arn:aws:iam::${AWS::AccountId}:role/${SourceRoleName}"
+              AWS: !Sub "arn:aws:iam::${AWS::AccountId}:root"
             Action:
               - s3:AbortMultipartUpload
               - s3:GetBucketLocation
@@ -48,10 +93,29 @@ Resources:
             Resource:
               - !Sub "${WAFLogsS3Bucket.Arn}/*"
               - !GetAtt WAFLogsS3Bucket.Arn
+            Condition:
+              ArnLike:
+                aws:SourceArn: !Sub "arn:aws:iam::${AWS::AccountId}:role/${SourceRoleName}-*"
+          - Effect: Deny
+            Action: s3:*
+            Resource:
+              - !Sub "${WAFLogsS3Bucket.Arn}/*"
+              - !GetAtt WAFLogsS3Bucket.Arn
+            Condition:
+              Bool:
+                aws:SecureTransport: 'false'
+            Principal: "*"
+  KeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: alias/WAFLogs
+      TargetKeyId: !Ref KMSKey
   KMSKey:
     Type: 'AWS::KMS::Key'
+    UpdateReplacePolicy: Retain
     Properties:
       Description: WAF Log Key
+      EnableKeyRotation: True
       KeyPolicy:
         Version: 2012-10-17
         Id: key-default-1

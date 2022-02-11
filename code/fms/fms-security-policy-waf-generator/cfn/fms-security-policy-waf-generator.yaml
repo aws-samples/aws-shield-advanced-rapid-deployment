@@ -1,0 +1,87 @@
+AWSTemplateFormatVersion: 2010-09-09
+Parameters:
+  CodeS3BucketPrefix:
+    Type: String
+  CodeS3Key:
+    Type: String
+    Default: lambda.zip
+Resources:
+  GenerateFMSPolicyLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+              - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+  GenerateFMSPolicyLambdaPolicy:
+    Type: 'AWS::IAM::Policy'
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W12
+            reason: "Wildcard resources required for waf List/Get permissions"
+    Properties:
+      PolicyName: fms-policy-generator
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - "logs:CreateLogGroup"
+              - "logs:CreateLogStream"
+              - "logs:PutLogEvents"
+            Resource: "arn:aws:logs:*:*:*"
+          - Effect: Allow
+            Action:
+              - "s3:GetObject"
+            Resource: !Sub "arn:aws:s3:::${CodeS3BucketPrefix}*/*"
+          - Effect: Allow
+            Action:
+              - "wafv2:ListRuleGroups"
+              - "wafv2:GetRuleGroup"
+              - "xray:PutTraceSegments"
+              - "xray:PutTelemetryRecords"
+            Resource: "*"
+          - Effect: Allow
+            Action: ssm:GetParameter
+            Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/fms-policy-generator-config/*"
+      Roles:
+        - !Ref GenerateFMSPolicyLambdaRole
+  GenerateFMSPolicyLambdaFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: GenerateFMSPolicyLambdaPolicy
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W58
+            reason: "It does..."
+          - id: W89
+            reason: "Not applicable"
+          - id: W92
+            reason: "Not appropiate for application use of Lambda"
+    Properties:
+      TracingConfig:
+        Mode: Active
+      Runtime: python3.9
+      Role: !GetAtt GenerateFMSPolicyLambdaRole.Arn
+      Handler: fms/fms-policy-waf-generator/lambda/index.lambda_handler
+      Environment:
+        Variables:
+          CodeS3BucketPrefix: !Ref CodeS3BucketPrefix
+          AccountId: !Ref AWS::AccountId
+          Region: !Ref AWS::Region
+      Code:
+        S3Bucket: !Sub "${CodeS3BucketPrefix}-${AWS::Region}"
+        S3Key: !Ref CodeS3Key
+Outputs:
+  FMSPolicyBuilderLambdaArn:
+    Description: Lambda to build FMS policys
+    Value: !GetAtt GenerateFMSPolicyLambdaFunction.Arn
+    Export:
+      Name: FMSPolicyBuilderLambdaArn

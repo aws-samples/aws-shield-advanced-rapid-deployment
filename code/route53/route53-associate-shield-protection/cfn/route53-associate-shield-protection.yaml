@@ -1,0 +1,95 @@
+AWSTemplateFormatVersion: 2010-09-09
+Parameters:
+  CodeS3BucketPrefix:
+    Type: String
+  CodeS3Key:
+    Type: String
+    Default: lambda.zip
+Resources:
+  Route53ShieldProtectionManageLambdaRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: "Defining to ensure multi-region gets unique name"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+              - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+  Route53ShieldProtectionManageLambdaPolicy:
+    Type: 'AWS::IAM::Policy'
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W12
+            reason: "Access to all shield/route53 resources is required"
+    Properties:
+      PolicyName: LambdaPolicy
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - "logs:CreateLogGroup"
+              - "logs:CreateLogStream"
+              - "logs:PutLogEvents"
+            Resource: "arn:aws:logs:*:*:*"
+          - Effect: Allow
+            Action:
+              - "route53:GetHealthCheckCount"
+              - "route53:GetHealthCheck"
+              - "route53:ListHealthChecks"
+              - "elasticloadbalancing:DescribeLoadBalancers"
+              - "shield:AssociateHealthCheck"
+              - "shield:CreateProtection"
+              - "shield:DeleteProtection"
+              - "shield:DescribeDRTAccess"
+              - "shield:DisassociateHealthCheck"
+              - "shield:DescribeProtection"
+              - "shield:GetSubscriptionState"
+              - "shield:ListProtections"
+              - "shield:ListTagsForResource"
+              - "xray:PutTraceSegments"
+              - "xray:PutTelemetryRecords"
+            Resource: "*"
+      Roles:
+        - !Ref Route53ShieldProtectionManageLambdaRole
+  Route53ShieldProtectionManageLambdaFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: Route53ShieldProtectionManageLambdaPolicy
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W58
+            reason: "It does..."
+          - id: W89
+            reason: "Not applicable"
+          - id: W92
+            reason: "Not appropiate for application use of Lambda"
+    Properties:
+      TracingConfig:
+        Mode: Active
+      Runtime: python3.9
+      Role: !GetAtt Route53ShieldProtectionManageLambdaRole.Arn
+      Handler: route53/route53-associate-shield-protection/lambda/index.lambda_handler
+      Environment:
+        Variables:
+          CodeS3BucketPrefix: !Ref CodeS3BucketPrefix
+          AccountId: !Ref AWS::AccountId
+          Region: !Ref AWS::Region
+      Code:
+        S3Bucket: !Sub "${CodeS3BucketPrefix}-${AWS::Region}"
+        S3Key: !Ref CodeS3Key
+Outputs:
+  Route53ShieldProtectionManageLambdaFunctionArn:
+    Value: !GetAtt Route53ShieldProtectionManageLambdaFunction.Arn
+    Export:
+      Name: Route53ShieldProtectionManageLambdaFunctionArn

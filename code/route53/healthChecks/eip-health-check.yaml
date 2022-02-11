@@ -12,7 +12,7 @@ Parameters:
       Type: String
       Default: ''
   probeResourcePath:
-      Type: String 
+      Type: String
       Default: '<na>'
       Description: Optional - Specify for Route 53 Probe health check to target a specific path other than the root site
   probeType:
@@ -72,8 +72,8 @@ Conditions:
   SearchStringFlag: !Or [!Equals [!Ref probeType, 'HTTPSSTRMATCH'],!Equals [!Ref probeType, 'HTTPSTRMATCH']]
   ProbePathFlag: !Not [!Equals [!Ref probeResourcePath, '<na>']]
   probePortFlag: !Not [!Equals [!Ref probePort, '<na>']]
-Mappings: 
-  ProbeMap: 
+Mappings:
+  ProbeMap:
     Port:
       "TCP": "80"
       "HTTPS": "443"
@@ -99,7 +99,7 @@ Resources:
       cfn_nag:
         rules_to_suppress:
           - id: W28
-            reason: "Alarm has a dynamically generated name unique per resources"    
+            reason: "Alarm has a dynamically generated name unique per resources"
     Properties:
       AlarmName: !Join ["-", ["DDosDetected", !Ref resourceArn]]
       ActionsEnabled: True
@@ -119,7 +119,7 @@ Resources:
       TreatMissingData: notBreaching
   Metric1HealthCheck:
     Type: 'AWS::Route53::HealthCheck'
-    Properties: 
+    Properties:
       HealthCheckConfig:
         Type: CLOUDWATCH_METRIC
         AlarmIdentifier:
@@ -152,9 +152,9 @@ Resources:
       Threshold: !Ref Metric1Threshold
       ComparisonOperator: GreaterThanOrEqualToThreshold
       TreatMissingData: notBreaching
-  Metric2HealthCheck: 
+  Metric2HealthCheck:
     Type: 'AWS::Route53::HealthCheck'
-    Properties: 
+    Properties:
       HealthCheckConfig:
         Type: CLOUDWATCH_METRIC
         AlarmIdentifier:
@@ -187,10 +187,9 @@ Resources:
       Threshold: !Ref Metric2Threshold
       ComparisonOperator: GreaterThanOrEqualToThreshold
       TreatMissingData: notBreaching
-
-  ProbeHealthCheck: 
+  ProbeHealthCheck:
     Type: AWS::Route53::HealthCheck
-    Properties: 
+    Properties:
       HealthCheckConfig:
           Type: !FindInMap [ProbeMap, "probeTypeMap", !Ref probeType]
           ResourcePath: !If [ProbePathFlag, !Ref probeResourcePath, !Ref "AWS::NoValue"]
@@ -203,9 +202,9 @@ Resources:
       HealthCheckTags:
       - Key: Name
         Value: !Join ["-", ["Probe", !Ref resourceArn, !Ref resourceArn]]
-  CalculatedHealthCheck: 
+  CalculatedHealthCheck:
     Type: 'AWS::Route53::HealthCheck'
-    Properties: 
+    Properties:
       HealthCheckConfig:
         Type: CALCULATED
         HealthThreshold: 2
@@ -216,6 +215,12 @@ Resources:
       HealthCheckTags:
       - Key: Name
         Value: !Join ["-", ["CalculatedHC", !Ref resourceArn]]
+  ShieldAssociation:
+    Type: Custom::ShieldProtectionHealthCheck
+    Properties:
+      ServiceToken: !ImportValue Route53ShieldProtectionManageLambdaFunctionArn
+      ResourceArn: !Ref resourceArn
+      CalculatedHCId: !Ref CalculatedHealthCheck
 Outputs:
   CalculatedHealthCheckId:
     Value: !Ref CalculatedHealthCheck

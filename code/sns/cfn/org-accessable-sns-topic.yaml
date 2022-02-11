@@ -125,7 +125,7 @@ Resources:
             sns_client = boto3.client('sns')
             org_client = boto3.client('organizations')
             paginator = org_client.get_paginator('list_accounts')
-            
+
             def lambda_handler(event, context):
                 snsAccountID = snsTopicArn.split(":")[3]
                 policy = {
@@ -168,6 +168,18 @@ Resources:
                                     "aws:SourceArn": []
                                 }
                             }
+                        },
+                        {
+                          "Sid": "AllowPublishThroughSSLOnly",
+                          "Action": "SNS:Publish",
+                          "Effect": "Deny",
+                          "Resource": snsTopicArn,
+                          "Condition": {
+                            "Bool": {
+                              "aws:SecureTransport": "false"
+                            }
+                          },
+                          "Principal": "*"
                         }
                     ]
                 }
@@ -186,4 +198,3 @@ Resources:
                     AttributeName="Policy",
                     AttributeValue=json.dumps(policy)
                 )
-                    

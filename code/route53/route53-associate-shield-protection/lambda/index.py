@@ -11,73 +11,122 @@ logger = logging.getLogger('hc')
 logger.setLevel('DEBUG')
 
 shield_client = boto3.client('shield')
+elbv2_client = boto3.client('elbv2')
 def lambda_handler(event, context):
   responseData = {}
   logger.debug(event)
+  #Extract details from inbound event
   try:
     resourceArn = event['ResourceProperties']['ResourceArn']
+    region = resourceArn.split(':')[3]
+    accountId =  resourceArn.split(':')[4]
     requestType = event['RequestType']
     calculatedHCId = event['ResourceProperties']['CalculatedHCId']
   except botocore.exceptions.ClientError as error:
     cfnresponse.send(event, context, cfnresponse.FAILED, {"Message": error.response['Error']['Message']}, "")
-    return()    
-  try:
-    shieldProtection =  shield_client.describe_protection(
-      ResourceArn=resourceArn)
-    logger.debug(json.dumps(shieldProtection))
-  except botocore.exceptions.ClientError as error:
-    cfnresponse.send(event, context, cfnresponse.FAILED, {"Message": error.response['Error']['Message']}, "")
     return()
+  #try:
+  if resourceArn.split('/')[1] == 'net':
+    print ("Found NLB, getting EIP Arns instead")
+    lbAzDetails = elbv2_client.describe_load_balancers(
+        LoadBalancerArns=[
+            resourceArn
+        ]
+    )['LoadBalancers'][0]['AvailabilityZones']
+    resourceArn = []
+    for az in lbAzDetails:
+      for a in az['LoadBalancerAddresses']:
+        resourceArn.append('arn:aws:ec2:' + region + ':' + accountId + ':eip-allocation/' +a['AllocationId'])
+  #except:
+    #print ("Not an NLB")
+  #Describe Shield Protection today
+  print (resourceArn)
+  print (type(resourceArn))
+  if isinstance(resourceArn,str):
+    try:
+      shieldProtections = []
+      shieldProtections.append(shield_client.describe_protection(
+        ResourceArn=resourceArn))
+      logger.debug(json.dumps(shieldProtections))
+    except botocore.exceptions.ClientError as error:
+      cfnresponse.send(event, context, cfnresponse.FAILED, {"Message": error.response['Error']['Message']}, "")
+      return()
+  else:
+    shieldProtections = []
+    for rArn in resourceArn:
+      try:
+        shieldProtections.append(shield_client.describe_protection(
+          ResourceArn=rArn))
+        logger.debug(json.dumps(shieldProtections))
+      except botocore.exceptions.ClientError as error:
+        cfnresponse.send(event, context, cfnresponse.FAILED, {"Message": error.response['Error']['Message']}, "")
+        return()
   logger.debug("requestType")
   logger.debug(requestType)
-  if not 'HealthCheckIds' in shieldProtection['Protection']:
-    try:
-      if requestType in ['Create','Update']:
-        #logger.info("Associating Health Check")
-        r = shield_client.associate_health_check(
-          ProtectionId=shieldProtection['Protection']['Id'],
-          HealthCheckArn="arn:aws:route53:::healthcheck/" + calculatedHCId
-          )
-    except botocore.exceptions.ClientError as error:
-        logger.debug(error.response['Error'])
-        cfnresponse.send(event, context, cfnresponse.FAILED, {"Message": error.response['Error']['Message']}, "")
-        return()      
-  elif shieldProtection['Protection']['HealthCheckIds'] == []:
-    logger.info("No Health Checks currently in place")
-    try:
-      if requestType in ['Create','Update']:
-        #logger.info("Associating Health Check")
-        r = shield_client.associate_health_check(
-          ProtectionId=shieldProtection['Protection']['Id'],
-          HealthCheckArn="arn:aws:route53:::healthcheck/" + calculatedHCId
-          )
-    except botocore.exceptions.ClientError as error:
-        logger.debug(error.response['Error'])
-        cfnresponse.send(event, context, cfnresponse.FAILED, {"Message": error.response['Error']['Message']}, "")
-        return()      
-  else:
-    #Confirm if provided HealthCheck is different than current Health CHeck
-    if shieldProtection['Protection']['HealthCheckIds'][0] == calculatedHCId:
-      logger.info("Existing Health Check already in place")
-    else:
-      logger.debug('Removing existing HC')
-      for hc in shieldProtection['Protection']['HealthCheckIds']:
-        try:
-          response = shield_client.disassociate_health_check(
-              ProtectionId=shieldProtection['Protection']['Id'],
-              HealthCheckArn="arn:aws:route53:::healthcheck/" + hc
-            )
-        except botocore.exceptions.ClientError as error:
-          cfnresponse.send(event, context, cfnresponse.FAILED, {"Message": error.response['Error']['Message']}, "")
-          return()
-        try:
-          if requestType in ['Create','Update']:
-            logger.info("Associating Health Check")
-            shield_client.associate_health_check(
-            ProtectionId=shieldProtection['Protection']['Id'],
-            HealthCheckArn="arn:aws:route53:::healthcheck/" + calculatedHCId
-          )
-        except botocore.exceptions.ClientError as error:
+  #For create and update requests
+  for shieldProtection in shieldProtections:
+    if requestType in ['Create','Update']:
+        #If there is not and has not been a health check associated, association inputted health check
+        if not 'HealthCheckIds' in shieldProtection['Protection']:
+          try:
+              #logger.info("Associating Health Check")
+              r = shield_client.associate_health_check(
+                ProtectionId=shieldProtection['Protection']['Id'],
+                HealthCheckArn="arn:aws:route53:::healthcheck/" + calculatedHCId
+                )
+          except botocore.exceptions.ClientError as error:
+              logger.debug(error.response['Error'])
+              cfnresponse.send(event, context, cfnresponse.FAILED, {"Message": error.response['Error']['Message']}, "")
+              return()
+        #If some other health check is or was associated, associate the inputted health check now
+        elif shieldProtection['Protection']['HealthCheckIds'] == []:
+          logger.info("No Health Checks currently in place")
+          try:
+              r = shield_client.associate_health_check(
+                ProtectionId=shieldProtection['Protection']['Id'],
+                HealthCheckArn="arn:aws:route53:::healthcheck/" + calculatedHCId
+                )
+          except botocore.exceptions.ClientError as error:
+              logger.debug(error.response['Error'])
+              cfnresponse.send(event, context, cfnresponse.FAILED, {"Message": error.response['Error']['Message']}, "")
+              return()
+        else:
+          #Confirm if provided HealthCheck is different than current Health CHeck
+          if shieldProtection['Protection']['HealthCheckIds'][0] == calculatedHCId:
+            logger.info("Existing Health Check already in place")
+          #Remove existing health checks before adding inputted health check
+          else:
+            logger.debug('Removing existing HC')
+            for hc in shieldProtection['Protection']['HealthCheckIds']:
+              try:
+                response = shield_client.disassociate_health_check(
+                    ProtectionId=shieldProtection['Protection']['Id'],
+                    HealthCheckArn="arn:aws:route53:::healthcheck/" + hc
+                  )
+              except botocore.exceptions.ClientError as error:
+                cfnresponse.send(event, context, cfnresponse.FAILED, {"Message": error.response['Error']['Message']}, "")
+                return()
+              try:
+                  logger.info("Associating Health Check")
+                  shield_client.associate_health_check(
+                  ProtectionId=shieldProtection['Protection']['Id'],
+                  HealthCheckArn="arn:aws:route53:::healthcheck/" + calculatedHCId
+                  )
+              except botocore.exceptions.ClientError as error:
+                  cfnresponse.send(event, context, cfnresponse.FAILED, {"Message": error.response['Error']['Message']}, "")
+                  return()
+    #If CloudFormation is signalling delete, disassociate the inputtted health check only if found
+    elif requestType in ['Delete']:
+        for hc in shieldProtection['Protection']['HealthCheckIds']:
+          try:
+              if calculatedHCId == hc:
+                    response = shield_client.disassociate_health_check(
+                        ProtectionId=shieldProtection['Protection']['Id'],
+                        HealthCheckArn="arn:aws:route53:::healthcheck/" + hc
+                      )
+          except botocore.exceptions.ClientError as error:
             cfnresponse.send(event, context, cfnresponse.FAILED, {"Message": error.response['Error']['Message']}, "")
             return()
+
+  #Signal Success if we didn't signal failure along the way
   cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData, "OK")

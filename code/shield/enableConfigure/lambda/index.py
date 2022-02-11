@@ -62,15 +62,15 @@ def lambda_handler(event, context):
     #Create DRT Role if needed
     try:
         iam_role_response = iam_client.get_role(
-            RoleName='AWSDRTAccess'
+            RoleName='AWSSRTAccess'
             )
         roleArn = iam_role_response['Role']['Arn']
-        logger.debug ("AWSDRTAccess already exists")
+        logger.debug ("AWS SRTAccess already exists")
     except botocore.exceptions.ClientError as error:
         if error.response['Error']['Code'] == 'NoSuchEntity':
             try:
                 iam_role_response = iam_client.create_role(
-                    RoleName='AWSDRTAccess',
+                    RoleName='AWSSRTAccess',
                     AssumeRolePolicyDocument='{"Version":"2012-10-17","Statement":[{"Sid":"","Effect":"Allow","Principal":{"Service":"drt.shield.amazonaws.com"},"Action":"sts:AssumeRole"}]}',
                     MaxSessionDuration=3600,
                 )
@@ -83,13 +83,13 @@ def lambda_handler(event, context):
         else:
             logger.error(error.response['Error'])
             responseData['Error'] = error.response['Error']
-            cfnresponse.send(event, context, cfnresponse.FAILED, responseData, "DRTRolePolicyConfigFailed")
+            cfnresponse.send(event, context, cfnresponse.FAILED, responseData, "SRTRolePolicyConfigFailed")
             return ()
     #Ensure DRT Policy Attached to Role
     try:
-        logger.info("Listing attached role policies for AWSDRTAccess role.")
+        logger.info("Listing attached role policies for AWSSRTAccess role.")
         iam_response = iam_client.list_attached_role_policies(
-            RoleName='AWSDRTAccess'
+            RoleName='AWSSRTAccess'
             )
         policyList = []
         for p in iam_response['AttachedPolicies']:
@@ -97,7 +97,7 @@ def lambda_handler(event, context):
         if 'AWSShieldDRTAccessPolicy' not in policyList:
             logger.info("Required Policy not attached to role, attaching")
             response = iam_client.attach_role_policy(
-                RoleName='AWSDRTAccess',
+                RoleName='AWSSRTAccess',
                 PolicyArn='arn:aws:iam::aws:policy/service-role/AWSShieldDRTAccessPolicy'
                 )
         else:
@@ -105,7 +105,7 @@ def lambda_handler(event, context):
     except botocore.exceptions.ClientError as error:
         logger.error(error)
         responseData['Error'] = error.response['Error']
-        cfnresponse.send(event, context, cfnresponse.FAILED, responseData, "DRTRolePolicyConfigFailed")
+        cfnresponse.send(event, context, cfnresponse.FAILED, responseData, "SRTRolePolicyConfigFailed")
         return ()
 
     if enableDRTAccess == 'true':
@@ -117,7 +117,7 @@ def lambda_handler(event, context):
         except botocore.exceptions.ClientError as error:
             logger.error(error)
             responseData['Error'] = error.response['Error']
-            cfnresponse.send(event, context, cfnresponse.FAILED, responseData, "DRTEnablementFailed")
+            cfnresponse.send(event, context, cfnresponse.FAILED, responseData, "SRTEnablementFailed")
             return ()
     else:
         try:
@@ -129,7 +129,7 @@ def lambda_handler(event, context):
         except botocore.exceptions.ClientError as error:
             logger.error(error)
             responseData['Error'] = error.response['Error']
-            cfnresponse.send(event, context, cfnresponse.FAILED, responseData, "DRTDisableFailed")
+            cfnresponse.send(event, context, cfnresponse.FAILED, responseData, "SRTDisableFailed")
             return ()
 
     try:

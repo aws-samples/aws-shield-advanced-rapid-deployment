@@ -1,0 +1,155 @@
+AWSTemplateFormatVersion: 2010-09-09
+Parameters:
+  WAFRuleKey:
+    Type: String
+    Default: fms/fms-policy-waf-generator/policy-examples/default.json
+  DefaultAction:
+    Type: String
+    Default: ALLOW
+    AllowedValues:
+      - ALLOW
+      - BLOCK
+  AccountScopeList:
+    Type: CommaDelimitedList
+    Description: A comma separated list of AWS account ID, uses for include/exclude based on Value of IncludeExcludeScope and if ScopeType is Accounts
+    Default: <na>
+  OUScopeList:
+    Type: CommaDelimitedList
+    Description: A comma separated list of AWS Organization OU's, uses for include/exclude based on Value of IncludeExcludeScope and if ScopeType is OU
+    Default: <na>
+  IncludeExcludeScope:
+    Type: String
+    Default: Include
+    AllowedValues:
+      - Include
+      - Exclude
+  PolicyName:
+    Type: String
+    Default: RegionalDefaultWAFPolicy
+  WebACLPolicyIdentifier:
+    Type: String
+    Default: AWSDefaultWAFRule
+  ScopeType:
+    Type: String
+    Description: "Should Firewall Manager Policies be scoped to the entire org (root) or a specific list of OUs (OU)"
+    Default: Org
+    AllowedValues:
+      - Org
+      - OU
+      - Accounts
+  ResourceTagUsage:
+    Type: String
+    Default: Include
+    AllowedValues:
+      - Include
+      - Exclude
+  AutoRemediate:
+    Type: String
+    Description: "Should Firewall Manager automatically force attachment (true) or audit compliance (false) for all applicable resource types of the Default WAF Rule"
+    Default: false
+    AllowedValues:
+      - true
+      - false
+  WebACLResourceTypes:
+    Type: String
+    Description: Regional Resource Types to Associate WebACL
+    Default: AWS::ApiGateway::Stage,AWS::ElasticLoadBalancingV2::LoadBalancer
+    AllowedValues:
+      - AWS::ApiGateway::Stage,AWS::ElasticLoadBalancingV2::LoadBalancer
+      - AWS::ElasticLoadBalancingV2::LoadBalancer
+      - AWS::ApiGateway::Stage
+      - <na>
+  OverrideCustomerWebACL:
+    Type: String
+    Description: Should this SecurityPolicy replace any assocaited WebACL's on scoped resources
+    Default: false
+    AllowedValues:
+      - true
+      - false
+  ScopeTagName1:
+    Type: String
+    Default: <na>
+  ScopeTagName2:
+    Type: String
+    Default: <na>
+  ScopeTagName3:
+    Type: String
+    Default: <na>
+  ScopeTagValue1:
+    Type: String
+    Default: <na>
+  ScopeTagValue2:
+    Type: String
+    Default: <na>
+  ScopeTagValue3:
+    Type: String
+    Default: <na>
+Conditions:
+  ScopeTagName1Flag: !Not [!Equals [!Ref ScopeTagName1, "<na>"]]
+  ScopeTagName2Flag: !Not [!Equals [!Ref ScopeTagName2, "<na>"]]
+  ScopeTagName3Flag: !Not [!Equals [!Ref ScopeTagName3, "<na>"]]
+  ScopeTagValue1Flag: !Not [!Equals [!Ref ScopeTagValue1, "<na>"]]
+  ScopeTagValue2Flag: !Not [!Equals [!Ref ScopeTagValue2, "<na>"]]
+  ScopeTagValue3Flag: !Not [!Equals [!Ref ScopeTagValue3, "<na>"]]
+  CreatePolicyFlag: !Not [!Equals [!Ref WebACLResourceTypes, '<na>']]
+  OUScopeFlag: !Equals [!Ref ScopeType,'OU']
+  AccountScopeFlag: !Equals [!Ref ScopeType, "Accounts"]
+  ExcludeResourceTagFlag: !Equals [!Ref ResourceTagUsage, "Exclude"]
+  IncludeScopeFlag: !Equals [!Ref IncludeExcludeScope, "Include"]
+  ExcludeScopeFlag: !Equals [!Ref IncludeExcludeScope, "Exclude"]
+Resources:
+  GenerateFMSPolicyCFN:
+    Type: Custom::GenerateFMSPolicy
+    Properties:
+      ServiceToken: !ImportValue FMSPolicyBuilderLambdaArn
+      wafRuleKey: !Ref WAFRuleKey
+      ManagedServiceDataTemplate: !Sub "/fms-policy-generator-config/${PolicyName}"
+      OverrideCustomerWebACLAssociation: !Ref OverrideCustomerWebACL
+      DefaultAction: !Ref DefaultAction
+  FMSWAFPolicy:
+    Condition: CreatePolicyFlag
+    Type: AWS::FMS::Policy
+    Properties:
+      ExcludeResourceTags: !If [ExcludeResourceTagFlag, true, false]
+      ResourceType: ResourceTypeList
+      ResourceTypeList: !Split [",", !Ref WebACLResourceTypes]
+      PolicyName: !Ref WebACLPolicyIdentifier
+      Tags:
+        - Key: User
+          Value: !Ref PolicyName
+      IncludeMap:
+        ORGUNIT:
+          !If [IncludeScopeFlag, !If [OUScopeFlag, !Ref OUScopeList, !Ref "AWS::NoValue"], !Ref "AWS::NoValue"]
+        ACCOUNT:
+          !If [IncludeScopeFlag, !If [AccountScopeFlag,  !Ref AccountScopeList, !Ref "AWS::NoValue"], !Ref "AWS::NoValue"]
+      ExcludeMap:
+        ORGUNIT:
+          !If [ExcludeScopeFlag, !If [OUScopeFlag, !Ref OUScopeList, !Ref "AWS::NoValue"], !Ref "AWS::NoValue"]
+        ACCOUNT:
+          !If [ExcludeScopeFlag, !If [AccountScopeFlag,  !Ref AccountScopeList, !Ref "AWS::NoValue"], !Ref "AWS::NoValue"]
+      RemediationEnabled: !Ref AutoRemediate
+      DeleteAllPolicyResources: true
+      SecurityServicePolicyData:
+        Type: WAFV2
+        ManagedServiceData: !GetAtt GenerateFMSPolicyCFN.Template
+      #ResourceTags:
+      ResourceTags:
+        !If
+        - ScopeTagName1Flag
+        -
+          - !If
+            - ScopeTagName1Flag
+            - Key:  !Ref ScopeTagName1
+              Value: !If [ScopeTagValue1Flag, !Ref ScopeTagValue1, ""]
+            - !Ref "AWS::NoValue"
+          - !If
+            - ScopeTagName2Flag
+            - Key:  !Ref ScopeTagName2
+              Value: !If [ScopeTagValue2Flag, !Ref ScopeTagValue2, ""]
+            - !Ref "AWS::NoValue"
+          - !If
+            - ScopeTagName3Flag
+            - Key:  !Ref ScopeTagName3
+              Value: !If [ScopeTagValue3Flag, !Ref ScopeTagValue3, ""]
+            - !Ref "AWS::NoValue"
+        - !Ref "AWS::NoValue"
