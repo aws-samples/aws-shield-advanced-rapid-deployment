@@ -1,9 +1,0 @@
-{
-    "Regions": [
-        "us-east-1",
-        "us-east-2",
-        "us-west-2"
-        ],
-    "BucketPrefix": "shield-advanced-ddos-automation",
-    "OrgId": ""
-}
