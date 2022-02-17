@@ -18,6 +18,8 @@ Lambda function
 
 #### Custom Lambda backed
 Other CloudFormation stacks call this function as a custom lambda backed resource.  Lambda accepts a Shield Protection Id and route 53 health check Id.  Lambda then associates the inputted health check with the Shield Protection Id.
+
+![Custom Config Rule for Shield Advanced proactive engagement!](./config-proactive-engagement.jpg)
 _____
 
 ## Dependencies
