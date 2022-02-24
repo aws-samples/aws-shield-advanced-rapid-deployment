@@ -99,7 +99,7 @@ Resources:
               - iam:ListAttachedRolePolicies
               - iam:CreateRole
               - iam:AttachRolePolicy
-            Resource: !Sub "arn:aws:iam::${AWS::AccountId}:role/AWSDRTAccess"
+            Resource: !Sub "arn:aws:iam::${AWS::AccountId}:role/AWSSRTAccess"
           - Sid: ShieldAdvancedConfiguration
             Effect: Allow
             Action:
