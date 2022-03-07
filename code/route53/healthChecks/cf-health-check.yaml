@@ -182,8 +182,8 @@ Resources:
       ActionsEnabled: True
       AlarmActions:
       - !If [AlarmActionFlag, !Ref SNSTopicNotifications, !Ref "AWS::NoValue"]
-      MetricName: DDoSDetected
-      Namespace: AWS/DDosProtection
+      MetricName: !Ref Metric2Name
+      Namespace: AWS/CloudFront
       Statistic: !Ref Metric2Statistic
       Dimensions:
       - Name: DistributionId
