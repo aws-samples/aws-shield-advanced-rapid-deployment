@@ -26,7 +26,7 @@ _____
 [Self Managed Stack Sets](../../prerequisites.md)  
 [Firewall Manager](../../prerequisites.md)  
 
-[fms-security-policy-waf-generator](../fms/fms-security-policy-waf-generator/readme.md) module
+[fms-security-policy-waf-generator](../../fms/fms-security-policy-waf-generator/readme.md) module
 
 _____
 
