@@ -14,6 +14,7 @@ Resources:
           - id: W28
             reason: "Defining to ensure multi-region gets unique name"
     Properties:
+      RoleName: !Sub "associate-hc-${AWS::AccountId}-lambdarole-${AWS::Region}"
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -78,6 +79,7 @@ Resources:
       TracingConfig:
         Mode: Active
       Runtime: python3.9
+      FunctionName: !Sub "config-proactive-engagement-${AWS::Region}"
       Role: !GetAtt Route53ShieldProtectionManageLambdaRole.Arn
       Handler: route53/route53-associate-shield-protection/lambda/index.lambda_handler
       Environment:

@@ -3,6 +3,8 @@ AWSTemplateFormatVersion: 2010-09-09
 Parameters:
   resourceArn:
       Type: String
+  resourceId:
+    Type: String
   probeFQDN:
       Type: String
       Description: DNS name for ALB, this can be a custom DNS name or the AWS provided name
@@ -134,11 +136,11 @@ Resources:
         Type: CLOUDWATCH_METRIC
         AlarmIdentifier:
           Region: !Ref AWS::Region
-          Name: !Ref Alarm1
+          Name: !Ref Alarm01
       HealthCheckTags:
       - Key: Name
         Value: !Join ["-", [!Ref Metric1Name, !Select [2,!Split ["/",!Ref resourceArn]]]]
-  Alarm1:
+  Alarm01:
     Type: AWS::CloudWatch::Alarm
     Metadata:
       cfn_nag:
@@ -154,8 +156,8 @@ Resources:
       Namespace: AWS/NetworkELB
       Statistic: !Ref Metric1Statistic
       Dimensions:
-      - Name: ResourceArn
-        Value: !Ref resourceArn
+        - Name: LoadBalancer
+          Value: !Ref resourceId
       Period: 60
       EvaluationPeriods: 20
       DatapointsToAlarm: 1
@@ -169,11 +171,11 @@ Resources:
         Type: CLOUDWATCH_METRIC
         AlarmIdentifier:
           Region: !Ref AWS::Region
-          Name: !Ref Alarm2
+          Name: !Ref Alarm02
       HealthCheckTags:
       - Key: Name
         Value: !Join ["-", [!Ref Metric2Name, !Select [2,!Split ["/",!Ref resourceArn]]]]
-  Alarm2:
+  Alarm02:
     Type: AWS::CloudWatch::Alarm
     Metadata:
       cfn_nag:
@@ -189,8 +191,8 @@ Resources:
       Namespace: AWS/NetworkELB
       Statistic: !Ref Metric2Statistic
       Dimensions:
-      - Name: ResourceArn
-        Value: !Ref resourceArn
+        - Name: LoadBalancer
+          Value: !Ref resourceId
       Period: 60
       EvaluationPeriods: 20
       DatapointsToAlarm: 1
@@ -204,11 +206,11 @@ Resources:
         Type: CLOUDWATCH_METRIC
         AlarmIdentifier:
           Region: !Ref AWS::Region
-          Name: !Ref Alarm3
+          Name: !Ref Alarm03
       HealthCheckTags:
       - Key: Name
         Value: !Join ["-", [!Ref Metric3Name, !Select [2,!Split ["/",!Ref resourceArn]]]]
-  Alarm3:
+  Alarm03:
     Type: AWS::CloudWatch::Alarm
     Metadata:
       cfn_nag:
@@ -224,8 +226,8 @@ Resources:
       Namespace: AWS/NetworkELB
       Statistic: !Ref Metric3Statistic
       Dimensions:
-      - Name: ResourceArn
-        Value: !Ref resourceArn
+      - Name: LoadBalancer
+        Value: !Ref resourceId
       Period: 60
       EvaluationPeriods: 20
       DatapointsToAlarm: 1
@@ -249,6 +251,11 @@ Resources:
         Value: !Join ["-", ["Probe", !Select [2,!Split ["/",!Ref resourceArn]]]]
   CalculatedHealthCheck:
     Type: 'AWS::Route53::HealthCheck'
+    DependsOn:
+      - Metric1HealthCheck
+      - Metric2HealthCheck
+      - Metric3HealthCheck
+      - ProbeHealthCheck
     Properties:
       HealthCheckConfig:
         Type: CALCULATED
@@ -263,6 +270,8 @@ Resources:
         Value: !Join ["-", ["CalculatedHC", !Select [2,!Split ["/",!Ref resourceArn]],!Select [3,!Split ["/",!Ref resourceArn]]]]
   ShieldAssociation:
     Type: Custom::ShieldProtectionHealthCheck
+    DependsOn:
+      - CalculatedHealthCheck
     Properties:
       ServiceToken: !ImportValue Route53ShieldProtectionManageLambdaFunctionArn
       ResourceArn: !Ref resourceArn

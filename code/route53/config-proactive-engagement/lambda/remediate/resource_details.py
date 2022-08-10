@@ -12,9 +12,9 @@ shield_client = boto3.client('shield')
 elbv2_client = boto3.client('elbv2')
 ec2_client = boto3.client('ec2')
 accountId = os.environ['AccountId']
+region = os.environ['AWS_REGION']
 
 cloudfrontForceEnableEnhancedMetrics = os.environ['CloudFrontForceEnableEnhancedMetrics']
-
 
 def ec2_details(resourceArn):
     response = {}
@@ -31,7 +31,14 @@ def ec2_details(resourceArn):
         ]
     )['Reservations'][0]['Instances'][0]
     if 'PublicDnsName' in instance:
-        response['defaultProbeFQDN'] = instance['PublicDnsName']
+        if instance['PublicDnsName'] == "":
+            address = instance['PublicIpAddress'].replace('.','-')
+            if region == 'us-east-1':
+                response['defaultProbeFQDN'] = (f"ec2-{address}.compute-1.amazonaws.com")
+            else:
+                response['defaultProbeFQDN'] = (f"ec2-{address}.{region}.compute-1.amazonaws.com")
+        else:
+            response['defaultProbeFQDN'] = instance['PublicDnsName']
     response['resourceArn'] = resourceArn
     if 'Tags' in instance:
         tags = {}
@@ -41,7 +48,6 @@ def ec2_details(resourceArn):
     else:
         response['Tags'] = {}
 
-    print (resourceArn)
     response['resourceId'] = resourceArn.split("/")[-1]
     response['HealthCheckKey'] = os.environ['EIPEC2HealthCheckKey']
     logger.debug(response)
@@ -54,6 +60,8 @@ def elbv2_details(resourceArn):
             resourceArn
         ]
     )['LoadBalancers'][0]
+    logger.debug ("lbDetails")
+    logger.debug (lbDetails)
     tags_raw = elbv2_client.describe_tags(
         ResourceArns=[
             resourceArn

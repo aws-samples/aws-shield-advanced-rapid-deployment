@@ -3,6 +3,8 @@ AWSTemplateFormatVersion: 2010-09-09
 Parameters:
   resourceArn:
     Type: String
+  resourceId:
+    Type: String
   probeFQDN:
     Type: String
   probeSearchString:
@@ -108,7 +110,7 @@ Resources:
           - id: W28
             reason: "Alarm has a dynamically generated name unique per resources"    
     Properties:
-      AlarmName: !Join ["-", [DDosDetected, !Select [1,!Split ["/",!Ref resourceArn]]]]
+      AlarmName: !Join ["_", [DDosDetected, !Select [1,!Split ["/",!Ref resourceArn]]]]
       ActionsEnabled: True
       AlarmActions:
       - !If [AlarmActionFlag, !Ref SNSTopicNotifications, !Ref "AWS::NoValue"]
@@ -116,8 +118,8 @@ Resources:
       Namespace: AWS/DDoSProtection
       Statistic: Sum
       Dimensions:
-      - Name: DistributionId
-        Value: !Select [1,!Split ["/",!Ref resourceArn]]
+        - Name: ResourceArn
+          Value: !Ref resourceArn
       Period: 60
       EvaluationPeriods: 20
       DatapointsToAlarm: 1
@@ -131,11 +133,11 @@ Resources:
         Type: CLOUDWATCH_METRIC
         AlarmIdentifier:
           Region: !Ref AWS::Region
-          Name: !Ref Alarm1
+          Name: !Ref Alarm01
       HealthCheckTags:
       - Key: Name
-        Value: !Join ["-", [!Ref Metric1Name, !Select [1,!Split ["/",!Ref resourceArn]]]]
-  Alarm1:
+        Value: !Join ["_", [!Ref Metric1Name, !Select [1,!Split ["/",!Ref resourceArn]]]]
+  Alarm01:
     Type: AWS::CloudWatch::Alarm
     Metadata:
       cfn_nag:
@@ -143,7 +145,7 @@ Resources:
           - id: W28
             reason: "Alarm has a dynamically generated name unique per resources"    
     Properties:
-      AlarmName: !Join ["-", [!Ref Metric1Name, !Select [1,!Split ["/",!Ref resourceArn]]]]
+      AlarmName: !Join ["_", [!Ref Metric1Name, !Select [1,!Split ["/",!Ref resourceArn]]]]
       ActionsEnabled: True
       AlarmActions:
       - !If [AlarmActionFlag, !Ref SNSTopicNotifications, !Ref "AWS::NoValue"]
@@ -153,6 +155,8 @@ Resources:
       Dimensions:
       - Name: DistributionId
         Value: !Select [1,!Split ["/",!Ref resourceArn]]
+      - Name: Region
+        Value: Global
       Period: 60
       EvaluationPeriods: 20
       DatapointsToAlarm: 1
@@ -166,11 +170,11 @@ Resources:
         Type: CLOUDWATCH_METRIC
         AlarmIdentifier:
           Region: !Ref AWS::Region
-          Name: !Ref Alarm2
+          Name: !Ref Alarm02
       HealthCheckTags:
       - Key: Name
-        Value: !Join ["-", [!Ref Metric2Name, !Select [1,!Split ["/",!Ref resourceArn]]]]
-  Alarm2:
+        Value: !Join ["_", [!Ref Metric2Name, !Select [1,!Split ["/",!Ref resourceArn]]]]
+  Alarm02:
     Type: AWS::CloudWatch::Alarm
     Metadata:
       cfn_nag:
@@ -178,7 +182,7 @@ Resources:
           - id: W28
             reason: "Alarm has a dynamically generated name unique per resources"    
     Properties:
-      AlarmName: !Join ["-", [!Ref Metric2Name, !Select [1,!Split ["/",!Ref resourceArn]]]]
+      AlarmName: !Join ["_", [!Ref Metric2Name, !Select [1,!Split ["/",!Ref resourceArn]]]]
       ActionsEnabled: True
       AlarmActions:
       - !If [AlarmActionFlag, !Ref SNSTopicNotifications, !Ref "AWS::NoValue"]
@@ -188,6 +192,8 @@ Resources:
       Dimensions:
       - Name: DistributionId
         Value: !Select [1,!Split ["/",!Ref resourceArn]]
+      - Name: Region
+        Value: Global
       Period: 60
       EvaluationPeriods: 20
       DatapointsToAlarm: 1
@@ -201,11 +207,11 @@ Resources:
         Type: CLOUDWATCH_METRIC
         AlarmIdentifier:
           Region: !Ref AWS::Region
-          Name: !Ref Alarm3
+          Name: !Ref Alarm03
       HealthCheckTags:
       - Key: Name
-        Value: !Join ["-", [!Ref Metric3Name, !Select [1,!Split ["/",!Ref resourceArn]]]]
-  Alarm3:
+        Value: !Join ["_", [!Ref Metric3Name, !Select [1,!Split ["/",!Ref resourceArn]]]]
+  Alarm03:
     Type: AWS::CloudWatch::Alarm
     Metadata:
       cfn_nag:
@@ -213,7 +219,7 @@ Resources:
           - id: W28
             reason: "Alarm has a dynamically generated name unique per resources"    
     Properties:
-      AlarmName: !Join ["-", [!Ref Metric3Name, !Select [1,!Split ["/",!Ref resourceArn]]]]
+      AlarmName: !Join ["_", [!Ref Metric3Name, !Select [1,!Split ["/",!Ref resourceArn]]]]
       ActionsEnabled: True
       AlarmActions:
       - !If [AlarmActionFlag, !Ref SNSTopicNotifications, !Ref "AWS::NoValue"]
@@ -223,6 +229,8 @@ Resources:
       Dimensions:
       - Name: DistributionId
         Value: !Select [1,!Split ["/",!Ref resourceArn]]
+      - Name: Region
+        Value: Global
       Period: 60
       EvaluationPeriods: 20
       DatapointsToAlarm: 1
@@ -243,7 +251,7 @@ Resources:
             !Ref probeHealthCheckRegions
       HealthCheckTags:
       - Key: Name
-        Value: !Join ["-", ["Probe", !Select [1,!Split ["/",!Ref resourceArn]]]]
+        Value: !Join ["_", ["Probe", !Select [1,!Split ["/",!Ref resourceArn]]]]
   CalculatedHealthCheck: 
     Type: 'AWS::Route53::HealthCheck'
     Properties: 
@@ -257,9 +265,11 @@ Resources:
         - !Ref ProbeHealthCheck
       HealthCheckTags:
       - Key: Name
-        Value: !Join ["-", ["CalculatedHC", !Select [1,!Split ["/",!Ref resourceArn]]]]
+        Value: !Join ["_", ["CalculatedHC", !Select [1,!Split ["/",!Ref resourceArn]]]]
   ShieldAssociation:
     Type: Custom::ShieldProtectionHealthCheck
+    DependsOn:
+      - CalculatedHealthCheck
     Properties:
       ServiceToken: !ImportValue Route53ShieldProtectionManageLambdaFunctionArn
       ResourceArn: !Ref resourceArn

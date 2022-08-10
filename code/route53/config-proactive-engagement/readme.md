@@ -1,11 +1,11 @@
 ## Overview
-Creates a helper lambda function called by other CloudFormation stacks to associate an input Route 53 health check Id and Shield protection Id.
+Custom config rules to establish Proactive Engagement Route 53 health checks with default best practices, consumes resource tags to customize health checks
 
 _____
 
 ## CloudFormation Details
 
-__Template__: `route53/route53-associate-shield-protection/cfn/route53-associate-shield-protection.yaml`  
+__Template__: `route53/config-proactive-engagement/cfn/config-proactive-engagement.yaml`  
 __Mechanism__: `CloudFormation StackSet`  
 __Location(s)__: `All accounts`  
 __Region(s)__: `All Regions`
@@ -13,17 +13,29 @@ __Region(s)__: `All Regions`
 ____
 ## How it works
 
-#### Native CloudFormation
-Lambda function
+## CODE
+remediate folder contains the lambda that gets invoked on config rule evaluation call. This method identifies all the resources that are tagged non compliant by shield and the health check stack creation requests for these resources are submitted to SQS queue.
 
-#### Custom Lambda backed
-Other CloudFormation stacks call this function as a custom lambda backed resource.  Lambda accepts a Shield Protection Id and route 53 health check Id.  Lambda then associates the inputted health check with the Shield Protection Id.
+cfn-stack-manage contains the lambda that gets invoked on a event schedule at every 10minutes (configurable from cfn). The lambda polls the sqs queue and reads 5 messages (configurable from cfn) on every invocation. This lambda creates the HealthCheck stacks for non compliant resource remediation.
+
+Commented out the logic to invoke config rule re-evaluation, since the evaluation is invoked once a day via _______. This commented function has the logic to identify the custom config rule and check if it is compliant or non compliant and call the rule re-evaluation if it is still non compliant. Reason for adding this: we have seen a behavior that some resources were not evaluated automatically for a long period. They needed to be re-evaluated.
+
+#### Native CloudFormation
+IAM Roles, SSM Automation Document, Custom Config rule, Lambda functions
+
+#### Custom Config Rule
+
+ShieldProtectionRegional and ShieldProtection Config resources are evaluated to ensure an existing Amazon Route 53 health check is associated with the Shield protection. Config does NOT confirm the configuration of an existing Route 53 health check. CheckTags can be specified to scope based on target resource tags for in scope resources if desired. When a resource is in scope and not compliant, an automatic remediation (SSM automation document) invokes Lambda to review for specific tags to customize Proactive Engagement Health Checks and then creates or updates a CloudFormation stack. This CloudFormation stack creates CloudWatch alarms and health checks (defaults based on resource type) and makes a custom lambda backed call which associates the calculated route 53 health check with the Shield protection.
 
 ![Custom Config Rule for Shield Advanced proactive engagement!](./config-proactive-engagement.jpg)
+
+#### StackSet Requirement
+When creating a stack set to deploy this mechanism, you must deploy to the us-east-1 region first (specify it first in the list of regions in scope) and deploy sequentially, not in parallel
 _____
 
 ## Dependencies
 * [Service Managed Stack Sets](../../prerequisites.md)  
+* [Route53 Associate Shield Protection](../route53/route53-associate-shield-protection/readme.md)  
 _____
 
 ## Parameter details:
@@ -145,5 +157,5 @@ aws cloudformation create-stack-instances
 --stack-set-name Enable-Shield-Advanced  
 --regions $Regions
 --deployment-targets OrganizationalUnitIds=$ParentRoot  
---operation-preferences RegionConcurrencyType=PARALLEL,MaxConcurrentPercentage=100
+--operation-preferences RegionConcurrencyType=SEQUENTIAL,MaxConcurrentPercentage=100
 ```

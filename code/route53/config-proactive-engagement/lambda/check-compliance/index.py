@@ -35,7 +35,6 @@ def config_eval_put(evaluation,resultToken):
         )
     return (response)
 def lambda_handler(event, context):
-
     invokingEvent = json.loads(event['invokingEvent'])
     print (json.dumps(event))
     print (invokingEvent)
@@ -43,15 +42,13 @@ def lambda_handler(event, context):
     resourceId = invokingEvent['configurationItem']['resourceId']
     resourceArn = invokingEvent['configurationItem']['configuration']['ResourceArn']
     configResourceType = invokingEvent['configurationItem']['resourceType']
+    relationships = invokingEvent['configurationItem']['relationships']
     region = invokingEvent['configurationItem']['awsRegion']
     accountId = event['accountId']
-    #evaluation['Annotation'] = resourceArn
-    #evaluation['ComplianceType'] = ""
     secondardResource = ""
     tags = []
 
-
-    shieldProtectionDetails = identify_resource_type(resourceId)
+    shieldProtectionDetails = identify_resource_type(resourceId, relationships)
     print ("shieldProtectionDetails")
     for k in list(shieldProtectionDetails.keys()):
         print (k + ": " + str(shieldProtectionDetails[k]))

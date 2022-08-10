@@ -1,10 +1,18 @@
 AWSTemplateFormatVersion: 2010-09-09
 Parameters:
+  ConfigRuleExectuionFrequency:
+    Type: String
+    Default: 'One_Hour'
+    AllowedValues:
+      - One_Hour
+      - Six_Hours
+      - Twelve_Hours
+      - TwentyFour_Hours
   CodeS3BucketPrefix:
     Type: String
   CodeS3Key:
     Type: String
-    Default: lambda_six.zip
+    Default: lambda.zip
   HealthCheckKey:
     Type: String
     Default: route53/cfn/healthChecks/cf-health-check.yaml
@@ -63,22 +71,6 @@ Parameters:
     Type: String
     Default: us-east-1
     Description: Controls where the ssm remediation role is created.  specificy <na> if this role will already exist outside of this deployment
-  SQSQName:
-    Type: String
-    Default: proactive-engagement
-    Description: SQS Queue name to handle remediation requests
-  MessagesToBeProcessed:
-    Type: Number
-    Default: 5
-    Description: Number of messages to be processed by the CFNStackManage lambda
-  ScheduledExpression:
-    Type: String
-    Default: "rate(10 minutes)"
-    Description: Schedule to call CFNStackManage lambda
-  CFNStackManageEventRuleName:
-    Type: String
-    Default: "LambdaInvokeEventRule"
-    Description: This rule runs every 60minutes to invoke CFMStackManage Lambda
 Conditions:
   PrimaryRegionOnly: !Equals [!Ref AWS::Region, !Ref PrimaryRegion]
 Resources:
@@ -220,108 +212,8 @@ Resources:
               - "s3:GetObject"
             Resource:
               - !Sub "arn:aws:s3:::${CodeS3BucketPrefix}-${AWS::Region}/*"
-          - Effect: Allow
-            Action:
-              - "sqs:GetQueueUrl"
-              - "sqs:SendMessage"
-              - "sqs:ListQueueTags"
-              - "sqs:SetQueueAttributes"
-            Resource:
-              - !GetAtt RemediateSQSQueue.Arn
       Roles:
         - !Ref LambdaRemediateRole
-  LambdaCFNStackManageRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: 2012-10-17
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service:
-              - lambda.amazonaws.com
-            Action:
-              - 'sts:AssumeRole'
-      Path: /
-  LambdaCFNStackManageRolePolicy:
-    Type: 'AWS::IAM::Policy'
-    Properties:
-      PolicyName: Policy
-      PolicyDocument:
-        Version: 2012-10-17
-        Statement:
-          - Effect: Allow
-            Action:
-            - logs:CreateLogGroup
-            - logs:CreateLogStream
-            - logs:PutLogEvents
-            Resource: "*"
-          - Effect: Allow
-            Action:
-              - "cloudformation:CreateStack"
-              - "cloudformation:DeleteStack"
-              - "cloudformation:UpdateStack"
-              - "cloudformation:DescribeStacks"
-            Resource:
-              - !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/HealthChecks-*/*"
-          - Effect: Allow
-            Action:
-              - "s3:GetObject"
-            Resource:
-              - !Sub "arn:aws:s3:::${CodeS3BucketPrefix}-${AWS::Region}/*"
-          - Effect: Allow
-            Action:
-              - "lambda:InvokeFunction"
-            Resource: 
-              - !Sub "arn:aws:lambda:*:${AWS::AccountId}:function:config-proactive-engagement-*"
-          - Effect: Allow
-            Action:
-              - "cloudfront:GetDistribution"
-              - "cloudfront:ListTagsForResource"
-              - "cloudfront:GetMonitoringSubscription"
-              - "cloudfront:CreateMonitoringSubscription"
-              - "ec2:DescribeAddresses"
-              - "ec2:DescribeInstances"
-              - "ec2:DescribeNetworkInterfaces"
-              - "elasticloadbalancing:DescribeLoadBalancers"
-              - "elasticloadbalancing:DescribeTags"
-              - "shield:AssociateHealthCheck"
-              - "shield:DisassociateHealthCheck"
-              - "shield:DescribeProtection"
-              - "shield:ListProtections"
-              - "route53:GetHealthCheck"
-              - "route53:CreateHealthCheck"
-              - "route53:UpdateHealthCheck"
-              - "route53:DeleteHealthCheck"
-              - "route53:ChangeTagsForResource"
-              - "cloudwatch:DescribeAlarms"
-              - "cloudwatch:PutMetricAlarm"
-              - "cloudwatch:DeleteAlarms"
-              - "xray:PutTraceSegments"
-              - "xray:PutTelemetryRecords"
-            Resource: "*"
-          - Effect: Allow
-            Action:
-              - "sqs:DeleteMessage"
-              - "sqs:GetQueueUrl"
-              - "sqs:ChangeMessageVisibility"
-              - "sqs:PurgeQueue"
-              - "sqs:ReceiveMessage"
-              - "sqs:GetQueueAttributes"
-              - "sqs:ListQueueTags"
-            Resource:
-              - !GetAtt RemediateSQSQueue.Arn
-          - Effect: Allow
-            Action:
-              - "config:Get*"
-              - "config:Describe*"
-              - "config:List*"
-              - "config:Select*"
-              - "config:StartConfigRulesEvaluation"
-            Resource:
-              - "*"
-      Roles:
-        - !Ref LambdaCFNStackManageRole
   ConfigPermissionToCallLambda:
     Type: AWS::Lambda::Permission
     Properties:
@@ -351,7 +243,7 @@ Resources:
         S3Key: !Ref CodeS3Key
       Handler: "route53/config-proactive-engagement/lambda/check-compliance/index.lambda_handler"
       Runtime: python3.8
-      Timeout: 369
+      Timeout: 234
       Environment:
         Variables:
           #checkTagsALB: !Ref CheckTagsALB
@@ -361,7 +253,7 @@ Resources:
           checkTags: !Ref CheckTags
           protectedResources: !Ref ProtectedResources
           snsTopicDetails: !Ref snsTopicDetails
-          CodeS3Bucket: !Sub "${CodeS3BucketPrefix}-${AWS::Region}"
+          CodeS3Bucket: !Sub ${CodeS3BucketPrefix}-${AWS::Region}
           CloudFrontForceEnableEnhancedMetrics: !Ref CloudFrontForceEnableEnhancedMetrics
       Role:
         Fn::GetAtt:
@@ -386,8 +278,7 @@ Resources:
         S3Key: !Ref CodeS3Key
       Handler: "route53/config-proactive-engagement/lambda/remediate/index.lambda_handler"
       Runtime: python3.9
-      Timeout: 693
-      ReservedConcurrentExecutions: 1
+      Timeout: 30
       Environment:
         Variables:
           AccountId: !Ref "AWS::AccountId"
@@ -399,73 +290,10 @@ Resources:
           EIPEC2HealthCheckKey: !Ref "EIPEC2HealthCheckKey"
           NLBHealthCheckKey: !Ref "NLBHealthCheckKey"
           CloudFrontForceEnableEnhancedMetrics: !Ref "CloudFrontForceEnableEnhancedMetrics"
-          # SQS_QUEUE_URL: !Sub "https://sqs.${AWS::Region}.amazonaws.com/${AWS::AccountId/${SQSQName}"
-          SQS_QUEUE_URL: !GetAtt RemediateSQSQueue.QueueUrl
       Role:
         Fn::GetAtt:
           - LambdaRemediateRole
           - Arn
-  CFNStackManageLambdaFunction:
-    Type: AWS::Lambda::Function
-    Properties:
-      TracingConfig:
-        Mode: Active
-      Code:
-        S3Bucket: !Sub "${CodeS3BucketPrefix}-${AWS::Region}"
-        S3Key: !Ref CodeS3Key
-      Handler: "route53/config-proactive-engagement/lambda/cfn-stack-manage/index.lambda_handler"
-      Runtime: python3.9
-      Timeout: 693
-      ReservedConcurrentExecutions: 1
-      Environment:
-        Variables:
-          AccountId: !Ref "AWS::AccountId"
-          # SQS_QUEUE_URL: !Sub "https://sqs.${AWS::Region}.amazonaws.com/${AWS::AccountId/${SQSQName}"
-          SQS_QUEUE_URL: !GetAtt RemediateSQSQueue.QueueUrl
-          MSGS_TO_BE_PROCESSED: !Ref MessagesToBeProcessed
-          CodeS3Bucket: !Sub "${CodeS3BucketPrefix}-${AWS::Region}"
-      Role:
-        Fn::GetAtt:
-          - LambdaCFNStackManageRole
-          - Arn
-  RemediateSQSQueue:
-    Type: AWS::SQS::Queue
-    Properties:
-      DelaySeconds: 0
-      MaximumMessageSize: 262144
-      MessageRetentionPeriod: 1209600
-      ReceiveMessageWaitTimeSeconds: 0
-      RedrivePolicy:
-        deadLetterTargetArn: !GetAtt RemediateDLQ.Arn
-        maxReceiveCount: 5
-      VisibilityTimeout: 180
-  RemediateDLQ:
-    Type: AWS::SQS::Queue
-    Properties:
-      QueueName: !Sub "${SQSQName}-DLQ"
-      ReceiveMessageWaitTimeSeconds: 20
-      VisibilityTimeout: 60
-  CFNStackManageEventRule:
-    Type: AWS::Events::Rule
-    Properties:
-      Name: !Ref CFNStackManageEventRuleName
-      Description: "Scheduled Rule to invoke CFNStackManage lambda every x minutes"
-      ScheduleExpression: !Ref ScheduledExpression
-      State: "ENABLED"
-      Targets:
-        -
-          Arn: !GetAtt "CFNStackManageLambdaFunction.Arn"
-          Id: "TargetFunction"
-  PermissionForEventsToInvokeLambda: 
-    Type: AWS::Lambda::Permission
-    Properties: 
-      FunctionName: !Ref "CFNStackManageLambdaFunction"
-      Action: "lambda:InvokeFunction"
-      Principal: "events.amazonaws.com"
-      SourceArn: 
-        Fn::GetAtt: 
-          - "CFNStackManageEventRule"
-          - "Arn"
   SSMAutomationPermissionToCallLambda:
     Type: AWS::Lambda::Permission
     Properties:
@@ -478,6 +306,7 @@ Resources:
   ConfigRule:
     Type: AWS::Config::ConfigRule
     Properties:
+      MaximumExecutionFrequency: !Sub "${ConfigRuleExectuionFrequency}" #Please confirm if this needs to be removed post all Health Checks are setup.
       Scope:
         ComplianceResourceTypes:
           - "AWS::Shield::Protection"
@@ -489,8 +318,11 @@ Resources:
             EventSource: "aws.config"
             MessageType: "ConfigurationItemChangeNotification"
           -
-            EventSource: aws.config
-            MessageType: OversizedConfigurationItemChangeNotification
+            EventSource: "aws.config"
+            MessageType: "OversizedConfigurationItemChangeNotification"
+          -
+            EventSource: "aws.config"
+            MessageType: "ScheduledNotification"
         SourceIdentifier:
           Fn::GetAtt:
             - ConfigRuleEvaluateLambdaFunction
@@ -564,10 +396,6 @@ Resources:
         ConfigRuleName: !Ref ConfigRule
         MaximumAutomaticAttempts: 5
         RetryAttemptSeconds: 15
-        ExecutionControls:
-          SsmControls:
-            ConcurrentExecutionRatePercentage: 1
-            ErrorPercentage: 1
         Parameters:
           ResourceArn:
             ResourceValue:

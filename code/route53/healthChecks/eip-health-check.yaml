@@ -2,6 +2,8 @@ AWSTemplateFormatVersion: 2010-09-09
 Parameters:
   resourceArn:
       Type: String
+  resourceId:
+    Type: String
   probeFQDN:
       Type: String
       Description: DNS name for Instance, this can be a custom DNS name or the AWS provided DNS name
@@ -144,8 +146,8 @@ Resources:
       Namespace: AWS/EC2
       Statistic: !Ref Metric1Statistic
       Dimensions:
-      - Name: resourceArn
-        Value: !Ref resourceArn
+        - Name: InstanceId
+          Value: !Ref resourceId
       Period: 60
       EvaluationPeriods: 20
       DatapointsToAlarm: 1
@@ -179,8 +181,8 @@ Resources:
       Namespace: AWS/EC2
       Statistic: !Ref Metric2Statistic
       Dimensions:
-      - Name: resourceArn
-        Value: !Ref resourceArn
+        - Name: InstanceId
+          Value: !Ref resourceId
       Period: 60
       EvaluationPeriods: 20
       DatapointsToAlarm: 1
@@ -204,6 +206,10 @@ Resources:
         Value: !Join ["-", ["Probe", !Ref resourceArn, !Ref resourceArn]]
   CalculatedHealthCheck:
     Type: 'AWS::Route53::HealthCheck'
+    DependsOn:
+      - Metric1HealthCheck
+      - Metric2HealthCheck
+      - ProbeHealthCheck
     Properties:
       HealthCheckConfig:
         Type: CALCULATED
@@ -217,6 +223,8 @@ Resources:
         Value: !Join ["-", ["CalculatedHC", !Ref resourceArn]]
   ShieldAssociation:
     Type: Custom::ShieldProtectionHealthCheck
+    DependsOn:
+      - CalculatedHealthCheck
     Properties:
       ServiceToken: !ImportValue Route53ShieldProtectionManageLambdaFunctionArn
       ResourceArn: !Ref resourceArn

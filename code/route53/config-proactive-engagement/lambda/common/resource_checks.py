@@ -1,8 +1,19 @@
 import boto3
+import botocore
 shield_client = boto3.client('shield')
 ec2_client = boto3.client('ec2')
 elbv2_client = boto3.client('elbv2')
 cloudfront_client = boto3.client('cloudfront')
+aga_client = boto3.client('globalaccelerator')
+
+
+def getEc2InstanceId(resourceArn, resourceType):
+    instanceId = None
+    if resourceType == 'instance':
+        print ("Found Instance")
+        instanceId = resourceArn.split('/')[-1]
+        print(instanceId)
+    return(instanceId)
 
 def resource_tags(resourceArn, resourceType):
 
@@ -51,9 +62,13 @@ def resource_tags(resourceArn, resourceType):
         print ()
     return (tags)
 
-def identify_resource_type(protectionId):
+def identify_resource_type(protectionId, relationships):
     print ("####################################################################################")
     response = {}
+    relationshipResourceType = ""
+    for relationship in relationships:
+        if relationship['resourceType'] == "AWS::ElasticLoadBalancing::LoadBalancer":
+            relationshipResourceType = "CLB"
     try:
         shieldProtection = shield_client.describe_protection(
           ProtectionId =protectionId)['Protection']
@@ -63,6 +78,8 @@ def identify_resource_type(protectionId):
         return (response)
     resourceArn = shieldProtection['ResourceArn']
     resourceType = resourceArn.split(':')[2]
+    print ("resourceArn")
+    print (resourceArn)
     region = resourceArn.split(":")[3]
     accountId = resourceArn.split(":")[4]
     #Resource name is Cloudfront already, no extra logic needed
@@ -72,9 +89,13 @@ def identify_resource_type(protectionId):
     if resourceType == 'globalaccelerator':
         print ("Found GlobalAccelerator!")
     elif resourceType == 'elasticloadbalancing':
-        resourceType = 'alb'
+        if relationshipResourceType == "CLB":
+            resourceType = "CLB"
+        else:
+            resourceType = 'alb'
     #If it is an EIP, it is either associate to an NLB, Instance or not applicable
     elif resourceType == 'ec2':
+        instanceId = resourceArn.split('/')[-1]
         allocId = resourceArn.split('/')[1]
         address = ec2_client.describe_addresses(
             AllocationIds=

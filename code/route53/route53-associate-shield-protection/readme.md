@@ -1,10 +1,10 @@
 ## Overview
-Custom config rules to establish Proactive Engagement Route 53 health checks with default best practices, consumes resource tags to customize health checks
+Creates a lambda function and export called by the config-proactive-engagement module to associate a calculated healthcheck with a shield protection ID.
 
 _____
 
 ## CloudFormation Details
-__Template__: route53/config-proactive-engagement/cfn/config-proactive-engagement.yaml  
+__Template__: route53/route53-associate-shield-protection/cfn/route53-associate-shield-protection.yaml  
 __Mechanism__: CloudFormation StackSet  
 __Location(s)__: All accounts  
 __Region(s)__: All Regions
@@ -13,17 +13,13 @@ ____
 ## How it works
 
 #### Native CloudFormation
-IAM Roles, SSM Automation Document, Custom Config rule, Lambda functions
+IAM Roles, Lambda function, CFN Export
 
-
-### Custom Config Rule
-ShieldProtectionRegional and ShieldProtection Config resources are evaluated to ensure an existing Amazon Route 53 health check is associated with the Shield protection.  Config does NOT confirm the configuration of an existing Route 53 health check.  [CheckTags](../../..checktags.md) can be specified to scope based on target resource tags for in scope resources if desired.  When a resource is in scope and not compliant, an automatic remediation (SSM automation document) invokes Lambda to review for specific [tags to customize Proactive Engagement Health Checks](/references/proactive_engagement_health_check_tags.md) and then creates or updates a CloudFormation stack.  This CloudFormation stack creates CloudWatch alarms and health checks (defaults based on resource type) and makes a custom lambda backed call which associates the calculated route 53 health check with the Shield protection.
-_____
+#### Custom Lambda backed
+Other CloudFormation stacks call this function as a custom lambda backed resource.  Lambda accepts a Shield Protection Id and route 53 health check Id.  Lambda then associates the inputted health check with the Shield Protection Id.
 
 ## Dependencies
-[AWS Config](../../../prerequisites.md)  
 [Service Managed Stack Sets](../../../prerequisites.md)  
-[SNS Topics](../../sns/cfn/org-accessable-sns-topic.yaml)
 
 _____
 
@@ -122,28 +118,21 @@ _____
 ### Create stack Set
 
 ```
-aws cloudformation create-stack-set  
---stack-set-name Enable-Shield-Advanced  
---template-body file://code/shield/enableConfigure/cfn/shield-enable-configure.yaml  
---capabilities CAPABILITY__AUTO__EXPAND CAPABILITY__NAMED__IAM CAPABILITY__IAM  
---permission-model SERVICE__MANAGED  
---auto-deployment Enabled=true,RetainStacksOnAccountRemoval=false  
---parameters  
-ParameterKey=CodeS3BucketPrefix,ParameterValue=$BucketPrefix-$PayerAccountId  
-ParameterKey=CodeS3Key,ParameterValue=lambda.zip  
-ParameterKey=EmergencyContactCount,ParameterValue=2  
-ParameterKey=EmergencyContactEmail1,ParameterValue=someone@example.com  
-ParameterKey=EmergencyContactEmail2,ParameterValue=someone@example.com  
-ParameterKey=EmergencyContactPhone1,ParameterValue=+15555555555  
-ParameterKey=EmergencyContactPhone2,ParameterValue=+15555555555  
-ParameterKey=EnabledProactiveEngagement,ParameterValue=true  
-ParameterKey=EnableDRTAccess,ParameterValue=false
+aws cloudformation create-stack-set \
+--stack-set-name route53-associate-shield-protection \
+--template-body file://code/route53/route53-associate-shield-protection/cfn/route53-associate-shield-protection.yaml \
+--capabilities CAPABILITY_AUTO_EXPAND CAPABILITY_NAMED_IAM CAPABILITY_IAM \
+--permission-model SERVICE_MANAGED \
+--auto-deployment Enabled=true,RetainStacksOnAccountRemoval=false \
+--parameters \
+ParameterKey=CodeS3BucketPrefix,ParameterValue=$BucketPrefix-$PayerAccountId \
+ParameterKey=CodeS3Key,ParameterValue=lambda.zip
 ```
 
 ### Add stacks to stack set
 ```
 aws cloudformation create-stack-instances \
---stack-set-name shield-enable-configure \
+--stack-set-name route53-associate-shield-protection \
 --regions $Regions \
 --deployment-targets OrganizationalUnitIds=$ParentRoot \
 --operation-preferences RegionConcurrencyType=PARALLEL,MaxConcurrentPercentage=100
