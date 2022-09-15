@@ -351,7 +351,7 @@ Resources:
                            , "split"("split_part"(webaclId, ':', 6), '/', 4)[1] scope
                            , webaclId
                            , "array_join"("transform"(nonTerminatingMatchingRules, (x) -> x.ruleId), ',') ntRules
-                           , concat("transform"("filter"(labels, (x) -> (x.name LIKE 'awswaf%')), (x) -> "split"(x.name, 'awswaf:managed:aws:')[2]),
+                           , concat("transform"("filter"(labels, (x) -> (x.name LIKE 'awswaf:managed:aws:%')), (x) -> "split"(x.name, 'awswaf:managed:aws:')[2]),
                                     "transform"("filter"(labels, (x) -> (NOT (x.name LIKE 'awswaf%'))), (x) -> x.name)) as labels
                            , terminatingRuleId
                            , "from_unixtime"(("floor"((timestamp / (1000 * 300))) * 300)) tz_window

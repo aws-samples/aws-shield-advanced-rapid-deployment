@@ -7,6 +7,15 @@ cfn_client = boto3.client('cloudformation')
 
 CodeS3Bucket = os.environ['CodeS3Bucket']
 
+def cfn_delete_stack(stackSuffix):
+    cfnStackName = ("HealthChecks-" + stackSuffix).replace("/","-")
+    try:
+        cfn_response = cfn_client.delete_stack(
+            StackName=cfnStackName)
+        return ()
+    except botocore.exceptions.ClientError as error:
+        logger.error(error.response['Error'])
+        return (error.response['Error'])
 def cfn_stack_manage(cfnParameters, stackSuffix, templateURL):
 
     cfnStackName = ("HealthChecks-" + stackSuffix).replace("/","-")
@@ -37,7 +46,7 @@ def cfn_stack_manage(cfnParameters, stackSuffix, templateURL):
       print(cfnAction)
     except botocore.exceptions.ClientError as error:
       if error.response['Error']['Message'] == "Stack with id " + cfnStackName + " does not exist":
-        
+
         cfnAction = "NeedToCreate"
       else:
         logger.error(error.response['Error'])
@@ -70,7 +79,7 @@ def cfn_stack_manage(cfnParameters, stackSuffix, templateURL):
           Parameters=cfnParameters,
           ClientRequestToken=clientRequestToken
           )
-      
+
         cfnEvaluate = False
       except botocore.exceptions.ClientError as error:
         if error.response['Error']['Message'] == 'No updates are to be performed.':
