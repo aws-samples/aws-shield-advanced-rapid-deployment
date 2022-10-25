@@ -18,30 +18,35 @@ def lambda_handler(event, context):
   #Extract details from inbound event
   try:
     resourceArn = event['ResourceProperties']['ResourceArn']
-    region = resourceArn.split(':')[3]
-    accountId =  resourceArn.split(':')[4]
+    region = os.environ['AWS_REGION']
+    accountId =  event['ServiceToken'].split(':')[4]
     requestType = event['RequestType']
     calculatedHCId = event['ResourceProperties']['CalculatedHCId']
+    logger.debug ("ResourceArn: " + resourceArn)
+    logger.debug ("Region: " + region)
+    logger.debug ("AccountId: " + str(accountId))
+    logger.debug ("CalculatedHCId: " + calculatedHCId)
   except botocore.exceptions.ClientError as error:
     cfnresponse.send(event, context, cfnresponse.FAILED, {"Message": error.response['Error']['Message']}, "")
     return()
   #try:
-  if resourceArn.split('/')[1] == 'net':
-    print ("Found NLB, getting EIP Arns instead")
+  if requestType == 'Delete':
+    logger.debug("Delete: No Action Needed")
+    cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData, "OK")
+    return()
+  if resourceArn.startswith("net/"):
+    logger.info ("Found NLB, getting EIP Arns instead")
+    #arn:aws:elasticloadbalancing:us-east-1:619607014791:loadbalancer/net/nlb1/e92328cef5a71f70
+    nlbArn = "".join(["arn:aws:elasticloadbalancing:", region, ":", accountId, ":loadbalancer/",resourceArn])
     lbAzDetails = elbv2_client.describe_load_balancers(
         LoadBalancerArns=[
-            resourceArn
+            nlbArn
         ]
     )['LoadBalancers'][0]['AvailabilityZones']
     resourceArn = []
     for az in lbAzDetails:
       for a in az['LoadBalancerAddresses']:
         resourceArn.append('arn:aws:ec2:' + region + ':' + accountId + ':eip-allocation/' +a['AllocationId'])
-  #except:
-    #print ("Not an NLB")
-  #Describe Shield Protection today
-  print (resourceArn)
-  print (type(resourceArn))
   if isinstance(resourceArn,str):
     try:
       shieldProtections = []
@@ -117,6 +122,7 @@ def lambda_handler(event, context):
                   return()
     #If CloudFormation is signalling delete, disassociate the inputtted health check only if found
     elif requestType in ['Delete']:
+      if 'HealthCheckIds' in shieldProtection['Protection']:
         for hc in shieldProtection['Protection']['HealthCheckIds']:
           try:
               if calculatedHCId == hc:

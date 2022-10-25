@@ -44,9 +44,9 @@ Parameters:
     Default: NetworkIn
   Metric1Threshold:
     Type: Number
-    Default: 0.85
-    MinValue: 0.01
-    MaxValue: 1
+    Default: 85
+    MinValue: 1
+    MaxValue: 100
   Metric2Threshold:
     Type: Number
     Default: 1000
@@ -70,10 +70,10 @@ Parameters:
       - Minimum
       - Maximum
 Conditions:
-  AlarmActionFlag: !Not [!Equals [!Ref SNSTopicNotifications, '<na>']]
-  SearchStringFlag: !Or [!Equals [!Ref probeType, 'HTTPSSTRMATCH'],!Equals [!Ref probeType, 'HTTPSTRMATCH']]
-  ProbePathFlag: !Not [!Equals [!Ref probeResourcePath, '<na>']]
-  probePortFlag: !Not [!Equals [!Ref probePort, '<na>']]
+  AlarmActionFlag: !Not [!Equals [!Ref "SNSTopicNotifications", '<na>']]
+  SearchStringFlag: !Or [!Equals [!Ref "probeType", 'HTTPSSTRMATCH'],!Equals [!Ref "probeType", 'HTTPSTRMATCH']]
+  ProbePathFlag: !Not [!Equals [!Ref "probeResourcePath", '<na>']]
+  probePortFlag: !Not [!Equals [!Ref "probePort", '<na>']]
 Mappings:
   ProbeMap:
     Port:
@@ -103,16 +103,16 @@ Resources:
           - id: W28
             reason: "Alarm has a dynamically generated name unique per resources"
     Properties:
-      AlarmName: !Join ["-", ["DDosDetected", !Ref resourceArn]]
+      AlarmName: !Join ["-", ["DDosDetected", !Ref "resourceId"]]
       ActionsEnabled: True
       AlarmActions:
-      - !If [AlarmActionFlag, !Ref SNSTopicNotifications, !Ref "AWS::NoValue"]
+      - !If [AlarmActionFlag, !Ref "SNSTopicNotifications", !Ref "AWS::NoValue"]
       MetricName: DDoSDetected
       Namespace: AWS/DDoSProtection
       Statistic: Sum
       Dimensions:
       - Name: ResourceArn
-        Value: !Ref resourceArn
+        Value: !Ref "resourceArn"
       Period: 60
       EvaluationPeriods: 20
       DatapointsToAlarm: 1
@@ -126,10 +126,10 @@ Resources:
         Type: CLOUDWATCH_METRIC
         AlarmIdentifier:
           Region: !Ref AWS::Region
-          Name: !Ref Alarm1
+          Name: !Ref "Alarm1"
       HealthCheckTags:
       - Key: Name
-        Value: !Join ["-", [!Ref Metric1Name, !Ref resourceArn]]
+        Value: !Join ["-", [!Ref "Metric1Name", !Ref "resourceArn"]]
   Alarm1:
     Type: AWS::CloudWatch::Alarm
     Metadata:
@@ -138,20 +138,20 @@ Resources:
           - id: W28
             reason: "Alarm has a dynamically generated name unique per resources"
     Properties:
-      AlarmName: !Join ["-", [!Ref Metric1Name, !Ref resourceArn]]
+      AlarmName: !Join ["-", [!Ref "Metric1Name", !Ref "resourceArn"]]
       ActionsEnabled: True
       AlarmActions:
-      - !If [AlarmActionFlag, !Ref SNSTopicNotifications, !Ref "AWS::NoValue"]
-      MetricName: !Ref Metric1Name
+      - !If [AlarmActionFlag, !Ref "SNSTopicNotifications", !Ref "AWS::NoValue"]
+      MetricName: !Ref "Metric1Name"
       Namespace: AWS/EC2
-      Statistic: !Ref Metric1Statistic
+      Statistic: !Ref "Metric1Statistic"
       Dimensions:
         - Name: InstanceId
-          Value: !Ref resourceId
+          Value: !Ref "resourceId"
       Period: 60
       EvaluationPeriods: 20
       DatapointsToAlarm: 1
-      Threshold: !Ref Metric1Threshold
+      Threshold: !Ref "Metric1Threshold"
       ComparisonOperator: GreaterThanOrEqualToThreshold
       TreatMissingData: notBreaching
   Metric2HealthCheck:
@@ -161,10 +161,10 @@ Resources:
         Type: CLOUDWATCH_METRIC
         AlarmIdentifier:
           Region: !Ref AWS::Region
-          Name: !Ref Alarm2
+          Name: !Ref "Alarm2"
       HealthCheckTags:
       - Key: Name
-        Value: !Join ["-", [!Ref Metric2Name, !Ref resourceArn]]
+        Value: !Join ["-", [!Ref "Metric2Name", !Ref "resourceArn"]]
   Alarm2:
     Type: AWS::CloudWatch::Alarm
     Metadata:
@@ -173,16 +173,16 @@ Resources:
           - id: W28
             reason: "Alarm has a dynamically generated name unique per resources"
     Properties:
-      AlarmName: !Join ["-", [!Ref Metric2Name, !Ref resourceArn]]
+      AlarmName: !Join ["-", [!Ref "Metric2Name", !Ref "resourceArn"]]
       ActionsEnabled: True
       AlarmActions:
       - !If [AlarmActionFlag, !Ref SNSTopicNotifications, !Ref "AWS::NoValue"]
-      MetricName: !Ref Metric2Name
+      MetricName: !Ref "Metric2Name"
       Namespace: AWS/EC2
-      Statistic: !Ref Metric2Statistic
+      Statistic: !Ref "Metric2Statistic"
       Dimensions:
         - Name: InstanceId
-          Value: !Ref resourceId
+          Value: !Ref "resourceId"
       Period: 60
       EvaluationPeriods: 20
       DatapointsToAlarm: 1
@@ -193,17 +193,17 @@ Resources:
     Type: AWS::Route53::HealthCheck
     Properties:
       HealthCheckConfig:
-          Type: !FindInMap [ProbeMap, "probeTypeMap", !Ref probeType]
-          ResourcePath: !If [ProbePathFlag, !Ref probeResourcePath, !Ref "AWS::NoValue"]
-          FullyQualifiedDomainName: !Ref probeFQDN
+          Type: !FindInMap [ProbeMap, "probeTypeMap", !Ref "probeType"]
+          ResourcePath: !If [ProbePathFlag, !Ref "probeResourcePath", !Ref "AWS::NoValue"]
+          FullyQualifiedDomainName: !Ref "probeFQDN"
           SearchString: !If [SearchStringFlag, !Ref probeSearchString, !Ref "AWS::NoValue"]
-          Port: !If [probePortFlag,!Ref probePort,!FindInMap [ProbeMap,"Port", !Ref probeType]]
-          EnableSNI: !FindInMap [ProbeMap, "SNIEnabled", !Ref probeType]
+          Port: !If [probePortFlag,!Ref probePort,!FindInMap [ProbeMap,"Port", !Ref "probeType"]]
+          EnableSNI: !FindInMap [ProbeMap, "SNIEnabled", !Ref "probeType"]
           Regions:
             !Ref probeHealthCheckRegions
       HealthCheckTags:
       - Key: Name
-        Value: !Join ["-", ["Probe", !Ref resourceArn, !Ref resourceArn]]
+        Value: !Join ["-", ["Probe", !Ref "resourceArn", !Ref "resourceArn"]]
   CalculatedHealthCheck:
     Type: 'AWS::Route53::HealthCheck'
     DependsOn:
@@ -220,7 +220,7 @@ Resources:
         - !Ref ProbeHealthCheck
       HealthCheckTags:
       - Key: Name
-        Value: !Join ["-", ["CalculatedHC", !Ref resourceArn]]
+        Value: !Join ["-", ["CalculatedHC", !Ref "resourceId"]]
   ShieldAssociation:
     Type: Custom::ShieldProtectionHealthCheck
     DependsOn:

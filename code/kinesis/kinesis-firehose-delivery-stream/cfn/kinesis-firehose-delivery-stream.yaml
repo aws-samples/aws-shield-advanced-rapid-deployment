@@ -11,7 +11,7 @@ Parameters:
     Type: String
     Default: WAFLogs
 Conditions:
-  OnlyPrimaryRegion: !Equals [!Ref AWS::Region,!Ref PrimaryRegion]
+  OnlyPrimaryRegion: !Equals [!Ref "AWS::Region",!Ref "PrimaryRegion"]
 Resources:
   WAFDeliveryLogGroup:
     Type: AWS::Logs::LogGroup
@@ -33,7 +33,7 @@ Resources:
           - id: W88
             reason: "There is no Delivery Stream, these are from FMS, not applicable"
     Properties:
-      DeliveryStreamName: !Sub "aws-waf-logs-delivery-${AWS::AccountId}-${AWS::Region}"
+      DeliveryStreamName: !Sub "aws-waf-logs-delivery-${AWS::Region}"
       DeliveryStreamEncryptionConfigurationInput:
         KeyARN: !GetAtt KMSKey.Arn
         KeyType: CUSTOMER_MANAGED_CMK
@@ -49,7 +49,7 @@ Resources:
         CompressionFormat: UNCOMPRESSED
         EncryptionConfiguration:
           KMSEncryptionConfig:
-            AWSKMSKeyARN: !Sub "arn:aws:kms:us-east-1:${AWS::AccountId}:alias/${KMSAliasName}"
+            AWSKMSKeyARN: !Sub "arn:aws:kms:${PrimaryRegion}:${AWS::AccountId}:alias/${KMSAliasName}"
         Prefix: !Sub 'firehose/${AWS::Region}/'
         RoleARN: !GetAtt WAFdeliveryRole.Arn
   KMSKey:
@@ -73,11 +73,11 @@ Resources:
           Principal:
             Service: !Sub "logs.${AWS::Region}.amazonaws.com"
           Action:
-          - kms:Encrypt
-          - kms:Decrypt
-          - kms:ReEncrypt*
-          - kms:GenerateDataKey
-          - kms:Describe*
+            - kms:Encrypt
+            - kms:Decrypt
+            - kms:ReEncrypt*
+            - kms:GenerateDataKey
+            - kms:Describe*
           Resource: '*'
           Condition:
             ArnEquals:
@@ -111,28 +111,28 @@ Resources:
         Statement:
         - Effect: Allow
           Action:
-            - s3:AbortMultipartUpload
-            - s3:GetBucketLocation
-            - s3:GetObject
-            - s3:ListBucket
-            - s3:ListBucketMultipartUploads
-            - s3:PutObject
+            - "s3:AbortMultipartUpload"
+            - "s3:GetBucketLocation"
+            - "s3:GetObject"
+            - "s3:ListBucket"
+            - "s3:ListBucketMultipartUploads"
+            - "s3:PutObject"
           Resource:
             - !Sub "arn:aws:s3:::${WAFLogS3Bucket}"
             - !Sub "arn:aws:s3:::${WAFLogS3Bucket}/*"
         - Effect: Allow
           Action:
-          - kinesis:DescribeStream
-          - kinesis:GetShardIterator
-          - kinesis:GetRecords
-          - kinesis:ListShards
+            - "kinesis:DescribeStream"
+            - "kinesis:GetShardIterator"
+            - "kinesis:GetRecords"
+            - "kinesis:ListShards"
           Resource: !GetAtt WAFDeliverystream.Arn
         - Effect: Allow
           Action:
-          - kms:Decrypt
-          - kms:GenerateDataKey
+            - "kms:Decrypt"
+            - "kms:GenerateDataKey"
           Resource:
-          - arn:aws:kms:region:account-id:key/key-id
+            - arn:aws:kms:region:account-id:key/key-id
           Condition:
             StringEquals:
               kms:ViaService: s3.region.amazonaws.com
@@ -140,54 +140,47 @@ Resources:
               kms:EncryptionContext:aws:s3:arn: arn:aws:s3:::bucket-name/prefix*
         - Effect: Allow
           Action:
-            - logs:PutLogEvents
+            - "logs:PutLogEvents"
           Resource:
             - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/kinesisfirehose:log-stream:aws-waf-logs-delivery-${AWS::AccountId}-${AWS::Region}"
-
-
-
-
-
-
-
-          - Effect: Allow
-            Action:
-              - "logs:PutLogEvents"
-            Resource:
-              - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/kinesisfirehose:log-stream:aws-waf-logs-delivery-${AWS::AccountId}-${AWS::Region}"
-          - Effect: Allow
-            Action:
-              - "s3:AbortMultipartUpload"
-              - "s3:GetBucketLocation"
-              - "s3:GetObject"
-              - "s3:ListBucket"
-              - "s3:ListBucketMultipartUploads"
-              - "s3:PutObject"
-              - "s3:PutObjectAcl"
-              - "s3:GetBucketLocation"
-              - "s3:ListBucket"
-              - "s3:ListBucketMultipartUploads"
-            Resource:
-              - !Sub "arn:aws:s3:::${WAFLogS3Bucket}"
-              - !Sub "arn:aws:s3:::${WAFLogS3Bucket}/*"
-          - Effect: Allow
-            Action:
-              - "kms:Encrypt"
-              - "kms:Decrypt"
-              - "kms:GenerateDataKey"
-              - "kms:DescribeKey"
-            Resource:
-              - !Sub "arn:aws:kms:us-east-1:${AWS::AccountId}:key/*"
-            Condition:
-              ForAnyValue:StringEquals:
-                kms:ResourceAliases: alias/WAFLogs
-          - Effect: Allow
-            Action:
-              - "kms:Encrypt"
-              - "kms:Decrypt"
-              - "kms:GenerateDataKey"
-              - "kms:DescribeKey"
-            Resource:
-              - !GetAtt KMSKey.Arn
+        - Effect: Allow
+          Action:
+            - "logs:PutLogEvents"
+          Resource:
+            - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/kinesisfirehose:log-stream:aws-waf-logs-delivery-${AWS::AccountId}-${AWS::Region}"
+        - Effect: Allow
+          Action:
+            - "s3:AbortMultipartUpload"
+            - "s3:GetBucketLocation"
+            - "s3:GetObject"
+            - "s3:ListBucket"
+            - "s3:ListBucketMultipartUploads"
+            - "s3:PutObject"
+            - "s3:PutObjectAcl"
+            - "s3:GetBucketLocation"
+            - "s3:ListBucket"
+            - "s3:ListBucketMultipartUploads"
+          Resource:
+            - !Sub "arn:aws:s3:::${WAFLogS3Bucket}"
+            - !Sub "arn:aws:s3:::${WAFLogS3Bucket}/*"
+        - Effect: Allow
+          Action:
+            - "kms:Encrypt"
+            - "kms:Decrypt"
+            - "kms:GenerateDataKey"
+            - "kms:DescribeKey"
+          Resource:
+            - !Sub "arn:aws:kms:us-east-1:${AWS::AccountId}:key/*"
+          Condition:
+            ForAnyValue:StringEquals:
+              kms:ResourceAliases: alias/WAFLogs
+        - Effect: Allow
+          Action:
+            - "kms:Encrypt"
+            - "kms:Decrypt"
+            - "kms:GenerateDataKey"
+            - "kms:DescribeKey"
+          Resource:
+            - !GetAtt KMSKey.Arn
       Roles:
         - !Ref WAFdeliveryRole

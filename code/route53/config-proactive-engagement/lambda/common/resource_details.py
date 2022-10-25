@@ -22,14 +22,7 @@ def ec2_details(resourceArn):
     logger.debug ("ec2_details")
     logger.debug (resourceArn)
     instance = ec2_client.describe_instances(
-        Filters=[
-            {
-                'Name': 'network-interface.association.allocation-id',
-                'Values': [
-                    resourceArn.split('/')[-1]
-                ]
-            }
-        ]
+        InstanceIds=[resourceArn.split('/')[-1]]
     )['Reservations'][0]['Instances'][0]
     instanceId = instance['InstanceId']
     if 'PublicDnsName' in instance:
@@ -54,6 +47,7 @@ def ec2_details(resourceArn):
     response['HealthCheckKey'] = os.environ['EIPEC2HealthCheckKey']
     logger.debug(response)
     return (response)
+
 def elbv2_details(resourceArn):
     logger.debug (resourceArn)
     response = {}
@@ -129,25 +123,51 @@ def cloudfront_details(distributionId):
     logger.debug(response)
     return (response)
 
-def get_deleted_resource_id_from_arn(resourceArn):
+def get_shield_protection_details(protectionId):
+    response = {}
+    try:
+        shieldProtectionDetails = shield_client.describe_protection(
+            ProtectionId =protectionId)['Protection']
+        logger.debug ("ShieldProtectionDetails")
+        logger.debug (shieldProtectionDetails)
+        return (shieldProtectionDetails)
+    except botocore.exceptions.ClientError as error:
+        logger.debug ("ShieldProtectionDetails - Error")
+        logger.error(error.response)
+        return (error.respone['Error']['Code'])
+
+def build_resource_details(resourceArn):
     print ("Start Get Deleted Resource ID from: ")
     print (resourceArn)
     response = {}
     if resourceArn.startswith('arn:aws:cloudfront'):
-        response['resourceId'] = resourceArn.split('/')[1]
+        logger.debug("Found CloudFront")
+        resourceId = resourceArn.split('/')[1]
+        response['stackSuffix'] = resourceId
+        response['resourceArn'] = resourceArn
+        response['resourceId'] = resourceId
         response['resourceType'] = 'cloudfront'
         return (response)
     elif resourceArn.startswith ('arn:aws:elasticloadbalancing'):
+        logger.debug("Found ELBV2")
         if 'loadbalancer/app/' in resourceArn:
-            response['resourceId'] = resourceArn.split('/',1)[1]
+            logger.debug("Found ALB")
+            resourceId = resourceArn.split('/',1)[1]
+            response['stackSuffix'] = resourceId
+            response['resourceArn'] = resourceArn
+            response['resourceId'] = resourceId
             response['resourceType'] = 'alb'
             return (response)
     elif resourceArn.startswith('arn:aws:ec2:'):
+        logger.debug("Found EIP Something")
         allocId = resourceArn.split('/')[1]
         address = ec2_client.describe_addresses(
             AllocationIds=
                 [allocId])['Addresses'][0]
+        logger.debug('Addresses response')
+        logger.debug(address)
         if 'NetworkInterfaceId' in address.keys():
+            logger.debug("Has NetworkInterfaceId")
             eniDescription = ec2_client.describe_network_interfaces(
                 NetworkInterfaceIds=[
                     address['NetworkInterfaceId']
@@ -155,27 +175,50 @@ def get_deleted_resource_id_from_arn(resourceArn):
                     )['NetworkInterfaces'][0]['Description']
             #Determine if EIP is associated to an NLB
             if eniDescription.startswith('ELB net'):
-                print ("Found NLB!")
-                nlbId = elbv2_client.describe_load_balancers(
+                logger.debug("Found NLB")
+                elbv2Arn = elbv2_client.describe_load_balancers(
                     Names=[
                         eniDescription.split('/')[1],
-                    ])['LoadBalancers'][0]['LoadBalancerArn'].split('/',1)[1]
-                response['resourceId'] = nlbId
+                    ])['LoadBalancers'][0]['LoadBalancerArn']
+                resourceId = elbv2Arn.split('/',1)[1]
+                response['stackSuffix'] = resourceId
+                response['resourceArn'] = elbv2Arn
+                response['resourceId'] = resourceId
                 response['resourceType'] = 'nlb'
                 return (response)                
             elif "InstanceId" in address.keys():
-                response['resourceId'] = address['InstanceId']
+                logger.debug("Found Instance")
+                response['stackSuffix'] = "-".join([address['InstanceId'],allocId])
+                response['resourceArn'] = "".join(["arn:aws:ec2:",region, ":", accountId,":instance/",address['InstanceId']])
+                response['resourceId'] = allocId
                 response['resourceType'] = 'instance'
                 return (response)
+        else:
+            logger.debug("Is NonAttachedEIP")
+            response['resourceType'] = 'NonAttachedEIP'
+            return (response)
+    elif resourceArn.startswith('arn:aws:route53'):
+        response['resourceType'] = 'hostedzone'
+        resourceId = resourceArn.split('/')[1]
+        response['resourceId'] = resourceId
+        response['stackSuffix'] = resourceId
+        return (response)
     else:    
-        return ({})
+        response = {
+            "resourceType":"unknown",
+            "resourceId": "unknown",
+            "stackSuffix": "unknown"
+        }
+        return (response)
     
     #ResourceArn: arn:aws:ec2:us-east-1:619607014791:eip-allocation/eipalloc-0745738c723bc950b | EIP on EC2
     #ResourceArn: arn:aws:cloudfront::619607014791:distribution/E2GVR1S0PP5KZ0
     #ResourceArn: arn:aws:elasticloadbalancing:us-east-1:619607014791:loadbalancer/app/prodapp/a183b0992714a862 | app/prodapp/a183b0992714a862
     return ()
-def get_deleted_resource_details(protectionId):
-    print ("Finding delete resource details for: " + protectionId)
+
+def get_deleted_resource_arn(protectionId):
+    logger.info ("Finding delete resource details for: " + protectionId)
+    #There is no easy way to know if it is a regional or global resource, so we try regional first, then global
     try:
         lastConfigurations = config_client.get_resource_config_history(
             resourceType='AWS::ShieldRegional::Protection',
@@ -196,16 +239,63 @@ def get_deleted_resource_details(protectionId):
         else:
             logger.debug(error.response['Error'])
             return (error.response['Error'])
-    logger.debug ("lastConfigurations!")
+    logger.debug ("Last Configurations")
     logger.debug (lastConfigurations)
     for lastConfiguration in lastConfigurations:
-        logger.debug("lastConfiguration")
-        logger.debug(lastConfiguration)
-        logger.debug(lastConfiguration['configuration'])
         if lastConfiguration['configuration'] != 'null':
-            print ("Found it!")
-            resourceArn = json.loads(lastConfiguration['configuration'])['ResourceArn']
-            print (lastConfiguration)
-            return({'ResourceArn':resourceArn})
-            
+            try:
+                resourceArn = json.loads(lastConfiguration['configuration'])['ResourceArn']
+                return({'ResourceArn':resourceArn})
+            except:
+                continue
+    #We only reach here if nothing returned from any of the last 10 config records
     return ({"Error":{"Code":"NoConfigurationFounds","Message":"Resource History does not have a config in last 10 items"}})
+
+def resource_tags(resourceArn, resourceType):
+    logger.debug("Begin resource Tag enumerate")
+    logger.debug ("ResourceArn:" + resourceArn)
+    logger.debug ("ResourceType:" + resourceType)
+    if resourceType == "cloudfront":
+        tags = cloudfront_client.list_tags_for_resource(
+            Resource=resourceArn
+        )['Tags']['Items']
+    #ELBv2 (ALB or NLB)
+    #elif resourceType == "AWS::GlobalAccelerator::Accelerator":
+        #tags = aga_client.list_tags_for_resource(
+            #ResourceArn=resourceArn
+            #)['Tags']
+    elif resourceType in ['alb','nlb']:
+        tags = elbv2_client.describe_tags(
+            ResourceArns=[resourceArn]
+            )['TagDescriptions'][0]['Tags']
+    elif resourceType == 'instance':
+        print ("Found Instance")
+        instanceId = resourceArn.split('/')[-1]
+
+        tags = ec2_client.describe_tags(
+            Filters=[
+                {
+                    'Name': 'resource-type',
+                    'Values': [
+                        'instance'
+                    ]
+                },
+                {
+                    'Name': 'resource-id',
+                    'Values': [
+                        instanceId
+                    ]
+                }
+            ]
+        )['Tags']
+        for t in tags:
+            t.pop('ResourceId')
+            t.pop('ResourceType')
+    else:
+        print ("Not Supported resource")
+        return ("Not Supported resource")
+    print ("Tag Results")
+    for t in tags:
+        print ("Name: " + t['Key'] + " | Value: " + t['Value'])
+        print ()
+    return (tags)

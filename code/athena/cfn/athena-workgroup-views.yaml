@@ -1,17 +1,17 @@
 ---
 AWSTemplateFormatVersion: 2010-09-09
 Parameters:
-    ProductName:
-        Type: String
-        Default: waflogs
-    WafLogsS3Bucket:
-        Type: String
-    WafLogsS3Prefix:
-        Type: String
-        Default: /
-    SourceIPAddressSource:
-        Type: String
-        Default: SOURCE_IP
+  ProductName:
+    Type: String
+    Default: waflogs
+  WafLogsS3Bucket:
+    Type: String
+  WafLogsS3Prefix:
+    Type: String
+    Default: /
+  SourceIPAddressSource:
+    Type: String
+    Default: SOURCE_IP
 Resources:
   GlueDatabaseWAFLogs:
     Type: AWS::Glue::Database
@@ -95,7 +95,6 @@ Resources:
           OutputLocation: !Sub 's3://${WafLogsS3Bucket}/athenaOutput/'
           EncryptionConfiguration:
             EncryptionOption: SSE_S3
-
   BuildAthenaViewsCall:
     DependsOn: AthenaQueryLambdaPolicy
     Type: Custom::BuildAthenaViews
@@ -306,7 +305,6 @@ Resources:
                 return ("QueriesFailed")
               else:
                 cfnrespond(event, context, "SUCCESS", responseData, "CreateViewsSuccessful")
-
   AthenaNamedQueryIPDetailed:
     DependsOn: AthenaWorkGroup
     Type: AWS::Athena::NamedQuery
@@ -359,7 +357,6 @@ Resources:
                            , datehour
                            FROM "${GlueDatabaseWAFLogs}"."waf_logs_raw"
                         )
-
   AthenaNamedQueryByURIIP:
     DependsOn: AthenaWorkGroup
     Type: AWS::Athena::NamedQuery

@@ -158,6 +158,6 @@ ParameterKey=ScopeTagValue1,ParameterValue=True
 ```
 aws cloudformation create-stack-instances \
 --stack-set-name fms-security-policy-shield-regional \
---regions us-east-1 \
+--regions $Regions \
 --deployment-targets Accounts=$FMSAccountId
 ```

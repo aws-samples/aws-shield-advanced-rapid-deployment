@@ -111,9 +111,9 @@ Resources:
       RemediationEnabled: !If [AutoRemediateFlag, true, false]
       SecurityServicePolicyData:
           Type: SHIELD_ADVANCED
-      DeleteAllPolicyResources: false
+      DeleteAllPolicyResources: False
       ResourceTags:
-        !If 
+        !If
         - ScopeTagName1Flag
         -
           - !If

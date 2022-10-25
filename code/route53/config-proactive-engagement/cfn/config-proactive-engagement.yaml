@@ -4,7 +4,7 @@ Parameters:
     Type: String
   CodeS3Key:
     Type: String
-    Default: lambda_six.zip
+    Default: lambda.zip
   HealthCheckKey:
     Type: String
     Default: route53/cfn/healthChecks/cf-health-check.yaml
@@ -71,16 +71,8 @@ Parameters:
     Type: Number
     Default: 5
     Description: Number of messages to be processed by the CFNStackManage lambda
-  ScheduledExpression:
-    Type: String
-    Default: "rate(10 minutes)"
-    Description: Schedule to call CFNStackManage lambda
-  CFNStackManageEventRuleName:
-    Type: String
-    Default: "LambdaInvokeEventRule"
-    Description: This rule runs every 60minutes to invoke CFMStackManage Lambda
 Conditions:
-  PrimaryRegionOnly: !Equals [!Ref AWS::Region, !Ref PrimaryRegion]
+  PrimaryRegionOnly: !Equals [!Ref "AWS::Region", !Ref "PrimaryRegion"]
 Resources:
   LambdaEvaluateRole:
     Type: AWS::IAM::Role
@@ -122,6 +114,7 @@ Resources:
           - Effect: Allow
             Action:
               - "config:PutEvaluations"
+              - "config:GetResourceConfigHistory"
               - "cloudfront:ListTagsForResource"
               - "ec2:DescribeAddresses"
               - "ec2:DescribeTags"
@@ -136,6 +129,20 @@ Resources:
               - "xray:PutTraceSegments"
               - "xray:PutTelemetryRecords"
             Resource: "*"
+          - Effect: Allow
+            Action:
+              - "kms:Decrypt"
+              - "kms:GenerateDataKey"
+            Resource:
+              - !GetAtt "KMSKey.Arn"
+          - Effect: Allow
+            Action:
+              - "sqs:GetQueueUrl"
+              - "sqs:SendMessage"
+              - "sqs:ListQueueTags"
+              - "sqs:SetQueueAttributes"
+            Resource:
+              - !GetAtt "RemediateSQSQueue.Arn"
       Roles:
         - !Ref LambdaEvaluateRole
   LambdaRemediateRole:
@@ -164,6 +171,8 @@ Resources:
             reason: "VPC bound lambda is not appropiate for this use case"
           - id: W92
             reason: "Reserved concurrency is not appropiate for this use case"
+          - id: W76
+            reason: "Policy is involved but cannot be avoided or simplified"
     Properties:
       PolicyName: Policy
       PolicyDocument:
@@ -181,6 +190,7 @@ Resources:
               - "cloudfront:ListTagsForResource"
               - "cloudfront:GetMonitoringSubscription"
               - "cloudfront:CreateMonitoringSubscription"
+              - "config:GetResourceConfigHistory"
               - "ec2:DescribeAddresses"
               - "ec2:DescribeInstances"
               - "ec2:DescribeNetworkInterfaces"
@@ -205,8 +215,13 @@ Resources:
             Action:
               - "lambda:InvokeFunction"
             Resource:
-              - !ImportValue Route53ShieldProtectionManageLambdaFunctionArn
-
+              - !ImportValue "Route53ShieldProtectionManageLambdaFunctionArn"
+          - Effect: Allow
+            Action:
+              - "kms:Decrypt"
+              - "kms:GenerateDataKey"
+            Resource:
+              - !GetAtt "KMSKey.Arn"
           - Effect: Allow
             Action:
               - "cloudformation:CreateStack"
@@ -245,6 +260,13 @@ Resources:
       Path: /
   LambdaCFNStackManageRolePolicy:
     Type: 'AWS::IAM::Policy'
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W12
+            reason: "IAM actions with * are required based on solution use case"
+          - id: W76
+            reason: "IAM actions with * are required based on solution use case"
     Properties:
       PolicyName: Policy
       PolicyDocument:
@@ -252,18 +274,25 @@ Resources:
         Statement:
           - Effect: Allow
             Action:
-            - logs:CreateLogGroup
-            - logs:CreateLogStream
-            - logs:PutLogEvents
+              - "logs:CreateLogGroup"
+              - "logs:CreateLogStream"
+              - "logs:PutLogEvents"
             Resource: "*"
           - Effect: Allow
             Action:
-              - "cloudformation:CreateStack"
-              - "cloudformation:DeleteStack"
-              - "cloudformation:UpdateStack"
-              - "cloudformation:DescribeStacks"
+              - "cloudformation:Create*"
+              - "cloudformation:Delete*"
+              - "cloudformation:Update*"
+              - "cloudformation:Describe*"
+              - "cloudformation:List*"
+              - "cloudformation:UntagResource"
+              - "cloudformation:TagResource"
             Resource:
               - !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/HealthChecks-*/*"
+          - Effect: Allow
+            Action:
+              - "cloudformation:ListStacks"
+            Resource: "*"
           - Effect: Allow
             Action:
               - "s3:GetObject"
@@ -289,6 +318,8 @@ Resources:
               - "shield:DisassociateHealthCheck"
               - "shield:DescribeProtection"
               - "shield:ListProtections"
+              - "shield:TagResource"
+              - "shield:UntagResource"
               - "route53:GetHealthCheck"
               - "route53:CreateHealthCheck"
               - "route53:UpdateHealthCheck"
@@ -302,6 +333,11 @@ Resources:
             Resource: "*"
           - Effect: Allow
             Action:
+              - "kms:Decrypt"
+            Resource:
+              - !GetAtt "KMSKey.Arn"
+          - Effect: Allow
+            Action:
               - "sqs:DeleteMessage"
               - "sqs:GetQueueUrl"
               - "sqs:ChangeMessageVisibility"
@@ -311,15 +347,6 @@ Resources:
               - "sqs:ListQueueTags"
             Resource:
               - !GetAtt RemediateSQSQueue.Arn
-          - Effect: Allow
-            Action:
-              - "config:Get*"
-              - "config:Describe*"
-              - "config:List*"
-              - "config:Select*"
-              - "config:StartConfigRulesEvaluation"
-            Resource:
-              - "*"
       Roles:
         - !Ref LambdaCFNStackManageRole
   ConfigPermissionToCallLambda:
@@ -351,18 +378,16 @@ Resources:
         S3Key: !Ref CodeS3Key
       Handler: "route53/config-proactive-engagement/lambda/check-compliance/index.lambda_handler"
       Runtime: python3.8
-      Timeout: 369
+      Timeout: 14
       Environment:
         Variables:
-          #checkTagsALB: !Ref CheckTagsALB
-          #checkTagsEIP: !Ref CheckTagsEIP
-          #checkTagsNLB: !Ref CheckTagsNLB
-          #checkTagsCF: !Ref CheckTagsCF
-          checkTags: !Ref CheckTags
-          protectedResources: !Ref ProtectedResources
-          snsTopicDetails: !Ref snsTopicDetails
+          AccountId: !Ref "AWS::AccountId"
+          SQS_QUEUE_URL: !GetAtt "RemediateSQSQueue.QueueUrl"
+          checkTags: !Ref "CheckTags"
+          ProtectedResources: !Ref "ProtectedResources"
+          SNSTopicDetails: !Ref "snsTopicDetails"
           CodeS3Bucket: !Sub "${CodeS3BucketPrefix}-${AWS::Region}"
-          CloudFrontForceEnableEnhancedMetrics: !Ref CloudFrontForceEnableEnhancedMetrics
+          CloudFrontForceEnableEnhancedMetrics: !Ref "CloudFrontForceEnableEnhancedMetrics"
       Role:
         Fn::GetAtt:
           - LambdaEvaluateRole
@@ -407,6 +432,13 @@ Resources:
           - Arn
   CFNStackManageLambdaFunction:
     Type: AWS::Lambda::Function
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W58
+            reason: "Has permission, does not use Amazon Managed Policy to grant"
+          - id: W89
+            reason: "Not applicable for use case"
     Properties:
       TracingConfig:
         Mode: Active
@@ -415,19 +447,67 @@ Resources:
         S3Key: !Ref CodeS3Key
       Handler: "route53/config-proactive-engagement/lambda/cfn-stack-manage/index.lambda_handler"
       Runtime: python3.9
-      Timeout: 693
+      Timeout: 14
       ReservedConcurrentExecutions: 1
       Environment:
         Variables:
           AccountId: !Ref "AWS::AccountId"
-          # SQS_QUEUE_URL: !Sub "https://sqs.${AWS::Region}.amazonaws.com/${AWS::AccountId/${SQSQName}"
-          SQS_QUEUE_URL: !GetAtt RemediateSQSQueue.QueueUrl
-          MSGS_TO_BE_PROCESSED: !Ref MessagesToBeProcessed
+          SQS_QUEUE_URL: !GetAtt "RemediateSQSQueue.QueueUrl"
+          MSGS_TO_BE_PROCESSED: !Ref "MessagesToBeProcessed"
           CodeS3Bucket: !Sub "${CodeS3BucketPrefix}-${AWS::Region}"
-      Role:
-        Fn::GetAtt:
-          - LambdaCFNStackManageRole
-          - Arn
+      Role: !GetAtt "LambdaCFNStackManageRole.Arn"
+  CFNStackManageLambdaEventSourceMapping:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      EventSourceArn: !GetAtt "RemediateSQSQueue.Arn"
+      FunctionName: !GetAtt "CFNStackManageLambdaFunction.Arn"
+
+  CFNStackManageLambdaInvokePermissions:
+    Type: AWS::Lambda::Permission
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W89
+            reason: "Not appropiate for use case"
+    Properties:
+      FunctionName: !GetAtt "CFNStackManageLambdaFunction.Arn"
+      Action: lambda:InvokeFunction
+      Principal: sqs.amazonaws.com
+      SourceArn: !GetAtt "RemediateSQSQueue.Arn"
+  KMSKey:
+    Type: 'AWS::KMS::Key'
+    Properties:
+      Description: SQS Message Encryption Key
+      EnableKeyRotation: true
+      PendingWindowInDays: 20
+      KeyPolicy:
+        Version: 2012-10-17
+        Id: key-default-1
+        Statement:
+          - Sid: Enable IAM User Permissions
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action: 'kms:*'
+            Resource: '*'
+          #- Sid: ProducerAccessToSQSKMS
+            #Effect: Allow
+            #Principal:
+              #AWS:
+                #- !GetAtt "ConfigRuleEvaluateLambdaFunction.Arn"
+                #- !GetAtt "RemediateLambdaFunction.Arn"
+                #- !GetAtt "CFNStackManageLambdaFunction.Arn"
+            #Action:
+                #- "kms:GenerateDataKey"
+                #- "kms:Decrypt"
+            #Resource: "*"
+          #- Sid: ConsumerAccessToSQSKMS
+            #Effect: Allow
+            #Principal:
+              #AWS: !GetAtt "CFNStackManageLambdaFunction.Arn"
+            #Action:
+              #- "kms:Decrypt"
+            #Resource: '*'
   RemediateSQSQueue:
     Type: AWS::SQS::Queue
     Properties:
@@ -435,37 +515,18 @@ Resources:
       MaximumMessageSize: 262144
       MessageRetentionPeriod: 1209600
       ReceiveMessageWaitTimeSeconds: 0
+      KmsMasterKeyId: !Ref "KMSKey"
       RedrivePolicy:
         deadLetterTargetArn: !GetAtt RemediateDLQ.Arn
-        maxReceiveCount: 5
-      VisibilityTimeout: 180
+        maxReceiveCount: 960
+      VisibilityTimeout: 15
   RemediateDLQ:
     Type: AWS::SQS::Queue
     Properties:
-      QueueName: !Sub "${SQSQName}-DLQ"
+      QueueName: !Sub "${AWS::StackName}-${SQSQName}-DLQ"
       ReceiveMessageWaitTimeSeconds: 20
       VisibilityTimeout: 60
-  CFNStackManageEventRule:
-    Type: AWS::Events::Rule
-    Properties:
-      Name: !Ref CFNStackManageEventRuleName
-      Description: "Scheduled Rule to invoke CFNStackManage lambda every x minutes"
-      ScheduleExpression: !Ref ScheduledExpression
-      State: "ENABLED"
-      Targets:
-        -
-          Arn: !GetAtt "CFNStackManageLambdaFunction.Arn"
-          Id: "TargetFunction"
-  PermissionForEventsToInvokeLambda: 
-    Type: AWS::Lambda::Permission
-    Properties: 
-      FunctionName: !Ref "CFNStackManageLambdaFunction"
-      Action: "lambda:InvokeFunction"
-      Principal: "events.amazonaws.com"
-      SourceArn: 
-        Fn::GetAtt: 
-          - "CFNStackManageEventRule"
-          - "Arn"
+      KmsMasterKeyId: !Ref "KMSKey"
   SSMAutomationPermissionToCallLambda:
     Type: AWS::Lambda::Permission
     Properties:
@@ -482,19 +543,20 @@ Resources:
         ComplianceResourceTypes:
           - "AWS::Shield::Protection"
           - "AWS::ShieldRegional::Protection"
+      MaximumExecutionFrequency: One_Hour
       Source:
         Owner: "CUSTOM_LAMBDA"
+        SourceIdentifier: !GetAtt ConfigRuleEvaluateLambdaFunction.Arn
         SourceDetails:
+          - EventSource: aws.config
+            MessageType: ScheduledNotification
+            MaximumExecutionFrequency: One_Hour
           -
             EventSource: "aws.config"
             MessageType: "ConfigurationItemChangeNotification"
           -
             EventSource: aws.config
             MessageType: OversizedConfigurationItemChangeNotification
-        SourceIdentifier:
-          Fn::GetAtt:
-            - ConfigRuleEvaluateLambdaFunction
-            - Arn
     DependsOn: ConfigPermissionToCallLambda
   SSMRole:
     Type: AWS::IAM::Role
@@ -529,7 +591,7 @@ Resources:
             Action:
               - "lambda:InvokeFunction"
             Resource:
-              - !GetAtt RemediateLambdaFunction.Arn
+              - !GetAtt "RemediateLambdaFunction.Arn"
       Roles:
         - !Ref SSMRole
   SSMDocument:
@@ -566,8 +628,8 @@ Resources:
         RetryAttemptSeconds: 15
         ExecutionControls:
           SsmControls:
-            ConcurrentExecutionRatePercentage: 1
-            ErrorPercentage: 1
+            ConcurrentExecutionRatePercentage: 2
+            ErrorPercentage: 100
         Parameters:
           ResourceArn:
             ResourceValue:
