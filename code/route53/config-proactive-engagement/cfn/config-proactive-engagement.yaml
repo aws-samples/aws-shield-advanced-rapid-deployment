@@ -301,7 +301,7 @@ Resources:
           - Effect: Allow
             Action:
               - "lambda:InvokeFunction"
-            Resource: 
+            Resource:
               - !Sub "arn:aws:lambda:*:${AWS::AccountId}:function:config-proactive-engagement-*"
           - Effect: Allow
             Action:
@@ -523,7 +523,6 @@ Resources:
   RemediateDLQ:
     Type: AWS::SQS::Queue
     Properties:
-      QueueName: !Sub "${AWS::StackName}-${SQSQName}-DLQ"
       ReceiveMessageWaitTimeSeconds: 20
       VisibilityTimeout: 60
       KmsMasterKeyId: !Ref "KMSKey"
