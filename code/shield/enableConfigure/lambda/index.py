@@ -19,6 +19,7 @@ enabledProactiveEngagement = os.environ['EnabledProactiveEngagement']
 enableDRTAccess = os.environ['EnableDRTAccess']
 emergencyContactCount = os.environ['EmergencyContactCount']
 accountId = os.environ['AccountId']
+srtAccessRoleName = os.environ['SrtAccessRoleName']
 #Build Emergency Contact List
 
 def lambda_handler(event, context):
@@ -62,7 +63,7 @@ def lambda_handler(event, context):
     #Create DRT Role if needed
     try:
         iam_role_response = iam_client.get_role(
-            RoleName='AWSSRTAccess'
+            RoleName=srtAccessRoleName
             )
         roleArn = iam_role_response['Role']['Arn']
         logger.debug ("AWS SRTAccess already exists")
@@ -70,7 +71,7 @@ def lambda_handler(event, context):
         if error.response['Error']['Code'] == 'NoSuchEntity':
             try:
                 iam_role_response = iam_client.create_role(
-                    RoleName='AWSSRTAccess',
+                    RoleName=srtAccessRoleName,
                     AssumeRolePolicyDocument='{"Version":"2012-10-17","Statement":[{"Sid":"","Effect":"Allow","Principal":{"Service":"drt.shield.amazonaws.com"},"Action":"sts:AssumeRole"}]}',
                     MaxSessionDuration=3600,
                 )
@@ -89,7 +90,7 @@ def lambda_handler(event, context):
     try:
         logger.info("Listing attached role policies for AWSSRTAccess role.")
         iam_response = iam_client.list_attached_role_policies(
-            RoleName='AWSSRTAccess'
+            RoleName=srtAccessRoleName
             )
         policyList = []
         for p in iam_response['AttachedPolicies']:
@@ -97,7 +98,7 @@ def lambda_handler(event, context):
         if 'AWSShieldDRTAccessPolicy' not in policyList:
             logger.info("Required Policy not attached to role, attaching")
             response = iam_client.attach_role_policy(
-                RoleName='AWSSRTAccess',
+                RoleName=srtAccessRoleName,
                 PolicyArn='arn:aws:iam::aws:policy/service-role/AWSShieldDRTAccessPolicy'
                 )
         else:
@@ -146,11 +147,11 @@ def lambda_handler(event, context):
 
     if enabledProactiveEngagement == 'true':
         try:
-            logger.info("Enabling proactive engagement.")
-            shield_response = shield_client.enable_proactive_engagement()
             logger.info("Associating proactive engagement details.")
             shield_client.associate_proactive_engagement_details(
                 EmergencyContactList=emergencyContactList)
+            logger.info("Enabling proactive engagement.")
+            shield_response = shield_client.enable_proactive_engagement()
         except botocore.exceptions.ClientError as error:
             if error.response['Error']['Code'] == 'InvalidOperationException':
                 logger.info("ProactiveEngagementAlreadyEnabled")

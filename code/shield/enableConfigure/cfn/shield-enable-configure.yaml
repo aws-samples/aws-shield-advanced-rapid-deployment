@@ -9,10 +9,12 @@ Metadata:
         Parameters:
           - EnabledProactiveEngagement
           - EnableDRTAccess
+          - EmergencyContactCount
           - EmergencyContactEmail1
           - EmergencyContactPhone1
           - EmergencyContactEmail2
           - EmergencyContactPhone2
+          - SrtAccessRoleName
       -
         Label:
           default: "Lambda Code"
@@ -49,6 +51,9 @@ Parameters:
     AllowedValues:
       - true
       - false
+  SrtAccessRoleName:
+    Type: String
+    Default: AWSSRTAccess
   EnableDRTAccess:
     Type: String
     Default: True
