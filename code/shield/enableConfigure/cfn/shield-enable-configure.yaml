@@ -162,6 +162,7 @@ Resources:
           EmergencyContactPhone1: !Ref EmergencyContactPhone1
           EmergencyContactPhone2: !If [SecondEmergencyContact, !Ref EmergencyContactPhone2, !Ref "AWS::NoValue"]
           EmergencyContactCount: !Ref EmergencyContactCount
+          SrtAccessRoleName: !Ref SrtAccessRoleName
           EnabledProactiveEngagement: !Ref EnabledProactiveEngagement
           EnableDRTAccess: !Ref EnableDRTAccess
           AccountId: !Ref AWS::AccountId
