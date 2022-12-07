@@ -4,11 +4,11 @@ Custom config rules to establish Proactive Engagement Route 53 health checks wit
 _____
 
 ## CloudFormation Details
-
-__Template__: `route53/config-proactive-engagement/cfn/config-proactive-engagement.yaml`  
+__Run in__: `AWS Organizational MGMT/Administrator Account`
 __Mechanism__: `CloudFormation StackSet`  
-__Location(s)__: `All accounts`  
-__Region(s)__: `All Regions`
+__Template__: `route53/config-proactive-engagement/cfn/config-proactive-engagement.yaml`  
+__Deploy to__: `All accounts, use ORG`  
+__Region(s)__: `us-east-1(mandatory), <all other regions> (if resources exist in multiple regions) Deployment method should be sequential with us-east-1 as the first region in the list followed by all other regions for regions.`
 
 ____
 ## How it works
@@ -54,7 +54,6 @@ S3 Key path to zip file.  By default, this should be the same for all parameters
 __Required__: Yes  
 __Type__: String  
 __Default__: lambda.zip  
-
 
 #### Remediation
 S3 Key path to zip file.  By default, this should be the same for all parameters with this name
@@ -122,40 +121,44 @@ __Default__: []
 __AllowedValues__: See [CheckTags](/references/checktag.md)
 
 #### snsTopicDetails
-The accountID and SNS topic name in the format <AccountId>|<SnsTopicName>.  e.g. 111111111111|mySnsTopic.  This is used to calculate the regional ARN for SNS topics.
 
+When snsCalcuation is CentralAccount:
+> The accountID and SNS topic name in the format <AccountId>|<SnsTopicName>.  e.g. 111111111111|mySnsTopic.  This is used to calculate the regional ARN for SNS topics.
+
+When snsCalcuation is LocalAccount
+> The SNS topic name only, e.g. ddos-alerts.  This is used to calculate the local and regional SNS topic with that name (note, the topic is NOT created here, you need to create it yourself)
 __Required__: Yes  
 __Type__: String
-
 _____
+
+#### snsCalculation
+
+__Required__: Yes  
+__Type__: String \
+__AllowedValues__: LocalAccount, CentralAccount
+_____
+
 
 ## Deployment scripts
 ### Create stack Set
 
 ```
-aws cloudformation create-stack-set  
---stack-set-name Enable-Shield-Advanced  
---template-body file://code/shield/enableConfigure/cfn/shield-enable-configure.yaml  
---capabilities CAPABILITY__AUTO__EXPAND CAPABILITY__NAMED__IAM CAPABILITY__IAM  
---permission-model SERVICE__MANAGED  
---auto-deployment Enabled=true,RetainStacksOnAccountRemoval=false  
---parameters  
-ParameterKey=CodeS3BucketPrefix,ParameterValue=$BucketPrefix-$PayerAccountId  
-ParameterKey=CodeS3Key,ParameterValue=lambda.zip  
-ParameterKey=EmergencyContactCount,ParameterValue=2  
-ParameterKey=EmergencyContactEmail1,ParameterValue=someone@example.com  
-ParameterKey=EmergencyContactEmail2,ParameterValue=someone@example.com  
-ParameterKey=EmergencyContactPhone1,ParameterValue=+15555555555  
-ParameterKey=EmergencyContactPhone2,ParameterValue=+15555555555  
-ParameterKey=EnabledProactiveEngagement,ParameterValue=true  
-ParameterKey=EnableDRTAccess,ParameterValue=false
+aws cloudformation create-stack-set \
+--stack-set-name route53-associate-shield-protection \
+--template-body file://code/route53/config-proactive-engagement/cfn/config-proactive-engagement.yaml \
+--capabilities CAPABILITY__AUTO__EXPAND CAPABILITY__NAMED__IAM CAPABILITY__IAM \
+--permission-model SERVICE__MANAGED \
+--auto-deployment Enabled=true,RetainStacksOnAccountRemoval=false \
+--parameters \
+ParameterKey=CodeS3BucketPrefix,ParameterValue=$BucketPrefix-$PayerAccountId \
+ParameterKey=CodeS3Key,ParameterValue=lambda.zip 
 ```
 
 ### Add stacks to stack set
 ```
-aws cloudformation create-stack-instances  
---stack-set-name Enable-Shield-Advanced  
---regions $Regions
---deployment-targets OrganizationalUnitIds=$ParentRoot  
---operation-preferences RegionConcurrencyType=SEQUENTIAL,MaxConcurrentPercentage=100
+aws cloudformation create-stack-instances \
+--stack-set-name route53-associate-shield-protection \
+--regions $Regions \
+--deployment-targets OrganizationalUnitIds=$ParentRoot \
+--operation-preferences RegionConcurrencyType=SEQUENTIAL,MaxConcurrentPercentage=100 
 ```

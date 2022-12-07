@@ -1,4 +1,12 @@
 AWSTemplateFormatVersion: 2010-09-09
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "S3 Information"
+        Parameters:
+          - CodeS3BucketPrefix
+          - CodeS3Key
 Parameters:
   CodeS3BucketPrefix:
     Type: String

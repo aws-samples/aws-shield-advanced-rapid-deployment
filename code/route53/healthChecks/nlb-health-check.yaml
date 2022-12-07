@@ -1,5 +1,40 @@
 ---
 AWSTemplateFormatVersion: 2010-09-09
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Probe Information"
+        Parameters:
+          - resourceArn
+          - probeFQDN
+          - probeSearchString
+          - probeResourcePath
+          - probeType
+          - probePort
+          - probeHealthCheckRegions
+      - Label:
+          default: "Notifications"
+        Parameters:
+          - SNSTopicNotifications
+      - Label:
+          default: "Metric #1"
+        Parameters:
+          - Metric1Name
+          - Metric1Threshold
+          - Metric1Statistic
+      - Label:
+          default: "Metric #2"
+        Parameters:
+          - Metric2Name
+          - Metric2Threshold
+          - Metric2Statistic
+      - Label:
+          default: "Metric #2"
+        Parameters:
+          - Metric3Name
+          - Metric3Threshold
+          - Metric3Statistic
 Parameters:
   resourceArn:
       Type: String

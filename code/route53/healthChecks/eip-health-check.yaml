@@ -1,4 +1,34 @@
 AWSTemplateFormatVersion: 2010-09-09
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Probe Information"
+        Parameters:
+          - resourceArn
+          - probeFQDN
+          - probeSearchString
+          - probeResourcePath
+          - probeType
+          - probePort
+          - probeHealthCheckRegions
+          - UID
+      - Label:
+          default: "Notifications"
+        Parameters:
+          - SNSTopicNotifications
+      - Label:
+          default: "Metric #1"
+        Parameters:
+          - Metric1Name
+          - Metric1Threshold
+          - Metric1Statistic
+      - Label:
+          default: "Metric #2"
+        Parameters:
+          - Metric2Name
+          - Metric2Threshold
+          - Metric2Statistic
 Parameters:
   resourceArn:
       Type: String
@@ -51,7 +81,6 @@ Parameters:
     Type: Number
     Default: 1000
     Description: Default represents 1 Gb/s for 1 minute straight
-    Default: 64424509440
     MinValue: 0
   Metric1Statistic:
     Type: String

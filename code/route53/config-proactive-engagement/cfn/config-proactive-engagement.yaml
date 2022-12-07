@@ -1,13 +1,52 @@
 AWSTemplateFormatVersion: 2010-09-09
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "S3 for Code"
+        Parameters:
+          - CodeS3BucketPrefix
+          - CodeS3Key
+      - Label:
+          defualt: "Resources to Protect"
+        Parameters:
+          - ProtectedResources
+      - Label:
+          default: "Health Check Keys"
+        Parameters:
+          - HealthCheckRegions
+          - HealthCheckKey
+          - ALBHealthCheckKey
+          - CloudfrontHealthCheckKey
+          - EIPEC2HealthCheckKey
+          - NLBHealthCheckKey
+      - Label:
+          default: "Regions"
+        Parameters:
+          - PrimaryRegion
+      - Label:
+          default: "Tags"
+        Parameters:
+          - CheckTags
+          - CheckTagsALB
+          - CheckTagsCF
+          - CheckTagsEIP
+          - CheckTagsNLB
+      - Label:
+          default: "CloudFront Metrics"
+        Parameters:
+          - CloudFrontForceEnableEnhancedMetrics
+      - Label:
+          default: "Alerting"
+        Parameters:
+          - snsTopicDetails
+          - snsCalculation
 Parameters:
   CodeS3BucketPrefix:
     Type: String
   CodeS3Key:
     Type: String
     Default: lambda.zip
-  HealthCheckKey:
-    Type: String
-    Default: route53/cfn/healthChecks/cf-health-check.yaml
   Remediation:
     Type: String
     Default: True
@@ -29,7 +68,7 @@ Parameters:
   CloudFrontForceEnableEnhancedMetrics:
     Type: String
     Default: Yes
-    Description: If a protected CloudFront distribution does not have additional metrics enabled, create a monitoring subscription.  THis is mandatory if using default metrics for CloudFront alarms to have data.
+    Description: If a protected CloudFront distribution does not have additional metrics enabled, create a monitoring subscription.  This is mandatory if using default metrics for CloudFront alarms to have data.
     AllowedValues:
       - Yes
       - No
@@ -40,18 +79,6 @@ Parameters:
   CheckTags:
     Type: String
     Default: '[]'
-  CheckTagsALB:
-    Type: String
-    Default: '[]'
-  CheckTagsCF:
-    Type: String
-    Default: '[]'
-  CheckTagsEIP:
-    Type: String
-    Default: '[]'
-  CheckTagsNLB:
-    Type: String
-    Default: '[]'
   ProtectedResources:
     Type: String
     Default: alb,instance,cf,nlb
@@ -59,14 +86,19 @@ Parameters:
     AllowedPattern: (alb|instance|cf|nlb)(,(alb|instance|cf|nlb))*$
   snsTopicDetails:
     Type: String
+    Description: "Specify <na> to not enable SNS Notification of DDoS events.  If snsCalculation is CentralAccount, the expected input is 111111111111|mytopic where 111111111111 is the central account ID, and mytopic is the name of the SNS Topic in each region.  If snsCalculation is LocalAccount, specify only the SNS topic name that is present in each account"
+    AllowedPattern: ([0-9]{11,12}\|[a-zZ-Z0-9\-\_]{0,200}|\<na\>|[a-zZ-Z0-9\-\_]{0,200})
+    Default: <na>
+  snsCalculation:
+    Type: String
+    Default: CentralAccount
+    AllowedValues:
+    - CentralAccount
+    - LocalAccount
   PrimaryRegion:
     Type: String
     Default: us-east-1
     Description: Controls where the ssm remediation role is created.  specificy <na> if this role will already exist outside of this deployment
-  SQSQName:
-    Type: String
-    Default: proactive-engagement
-    Description: SQS Queue name to handle remediation requests
   MessagesToBeProcessed:
     Type: Number
     Default: 5
@@ -419,13 +451,14 @@ Resources:
           CodeS3Bucket: !Sub "${CodeS3BucketPrefix}-${AWS::Region}"
           HC_Regions: !Ref "HealthCheckRegions"
           snsTopicDetails: !Ref "snsTopicDetails"
+          SNSCalculation: !Ref "snsCalculation"
           ALBHealthCheckKey: !Ref "ALBHealthCheckKey"
           CloudfrontHealthCheckKey: !Ref "CloudfrontHealthCheckKey"
           EIPEC2HealthCheckKey: !Ref "EIPEC2HealthCheckKey"
           NLBHealthCheckKey: !Ref "NLBHealthCheckKey"
           CloudFrontForceEnableEnhancedMetrics: !Ref "CloudFrontForceEnableEnhancedMetrics"
           # SQS_QUEUE_URL: !Sub "https://sqs.${AWS::Region}.amazonaws.com/${AWS::AccountId/${SQSQName}"
-          SQS_QUEUE_URL: !GetAtt RemediateSQSQueue.QueueUrl
+          SQS_QUEUE_URL: !GetAtt "RemediateSQSQueue.QueueUrl"
       Role:
         Fn::GetAtt:
           - LambdaRemediateRole

@@ -15,12 +15,21 @@ from botocore.exceptions import ClientError
 
 logger = logging.getLogger('hc')
 logger.setLevel('DEBUG')
-
 accountId = os.environ['AccountId']
-snsTopicDetails = os.environ['snsTopicDetails']
+
+snsCalculation = os.environ['SNSCalculation']
 codeS3Bucket = os.environ['CodeS3Bucket']
-snsaccountID = snsTopicDetails.split("|")[0]
-snsTopicName = snsTopicDetails.split("|")[1]
+snsTopicDetails = os.environ['snsTopicDetails']
+#If there is no value, don't configure a SNSTopicArn
+if snsTopicDetails == "":
+    snsaccountID = None
+    snsTopicName = None
+elif snsCalculation == 'LocalAccount':
+    snsaccountID = accountId
+    snsTopicName = snsTopicDetails
+else:
+    snsaccountID = snsTopicDetails.split("|")[0]
+    snsTopicName = snsTopicDetails.split("|")[1]
 
 
 shield_client = boto3.client('shield')
@@ -29,7 +38,10 @@ sqs_client = boto3.client("sqs", region_name=os.environ['AWS_REGION'])
 
 def lambda_handler(protectionId,context):
     logger.debug(protectionId)
-    snsTopicArn = ":".join(["arn:aws:sns",os.environ['AWS_REGION'], snsaccountID, snsTopicName])
+    if snsaccountID == None:
+        snsTopicArn = "<na>"
+    else:
+        snsTopicArn = ":".join(["arn:aws:sns",os.environ['AWS_REGION'], snsaccountID, snsTopicName])
     shieldProtectionDetails = get_shield_protection_details(protectionId)
     if 'Error' in shieldProtectionDetails:
         logger.info (shieldProtectionDetails['Error'])
