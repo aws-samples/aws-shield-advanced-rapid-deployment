@@ -8,7 +8,7 @@ Metadata:
           default: "Shield Advanced Configurations"
         Parameters:
           - EnabledProactiveEngagement
-          - EnableDRTAccess
+          - EnableSRTAccess
           - EmergencyContactCount
           - EmergencyContactEmail1
           - EmergencyContactPhone1
@@ -54,7 +54,7 @@ Parameters:
   SrtAccessRoleName:
     Type: String
     Default: AWSSRTAccess
-  EnableDRTAccess:
+  EnableSRTAccess:
     Type: String
     Default: True
     AllowedValues:
@@ -96,7 +96,7 @@ Resources:
               - "logs:CreateLogStream"
               - "logs:PutLogEvents"
             Resource: "arn:aws:logs:*:*:*"
-          - Sid: CreateAndManageDRTRole
+          - Sid: CreateAndManageSRTRole
             Effect: Allow
             Action:
               - iam:GetRole
@@ -104,7 +104,7 @@ Resources:
               - iam:ListAttachedRolePolicies
               - iam:CreateRole
               - iam:AttachRolePolicy
-            Resource: !Sub "arn:aws:iam::${AWS::AccountId}:role/AWSSRTAccess"
+            Resource: !Sub "arn:aws:iam::${AWS::AccountId}:role/${SrtAccessRoleName}"
           - Sid: ShieldAdvancedConfiguration
             Effect: Allow
             Action:
@@ -115,6 +115,7 @@ Resources:
               - shield:AssociateDRTRole
               - shield:DisassociateDRTRole
               - shield:DescribeDRTAccess
+              - shield:DescribeEmergencyContactSetting
               - shield:EnableProactiveEngagement
               - shield:DisableProactiveEngagement
               - shield:AssociateProactiveEngagementDetails
@@ -134,7 +135,8 @@ Resources:
       EmergencyContactPhone2: !If [SecondEmergencyContact, !Ref EmergencyContactPhone2, !Ref "AWS::NoValue"]
       EnabledProactiveEngagement: !Ref EnabledProactiveEngagement
       EmergencyContactCount: !Ref EmergencyContactCount
-      EnableDRTAccess: !Ref EnableDRTAccess
+      EnableSRTAccess: !Ref EnableSRTAccess
+      SRTAccessRoleName: !Ref SrtAccessRoleName
   ConfigureShieldLambda:
     Type: AWS::Lambda::Function
     Metadata:
@@ -155,14 +157,4 @@ Resources:
       Code:
         S3Bucket: !Sub "${CodeS3BucketPrefix}-${AWS::Region}"
         S3Key: !Ref CodeS3Key
-      Environment:
-        Variables:
-          EmergencyContactEmail1: !Ref EmergencyContactEmail1
-          EmergencyContactEmail2: !If [SecondEmergencyContact, !Ref EmergencyContactEmail2, !Ref "AWS::NoValue"]
-          EmergencyContactPhone1: !Ref EmergencyContactPhone1
-          EmergencyContactPhone2: !If [SecondEmergencyContact, !Ref EmergencyContactPhone2, !Ref "AWS::NoValue"]
-          EmergencyContactCount: !Ref EmergencyContactCount
-          SrtAccessRoleName: !Ref SrtAccessRoleName
-          EnabledProactiveEngagement: !Ref EnabledProactiveEngagement
-          EnableDRTAccess: !Ref EnableDRTAccess
-          AccountId: !Ref AWS::AccountId
+

@@ -144,10 +144,10 @@ _____
 
 ```
 aws cloudformation create-stack-set \
---stack-set-name route53-associate-shield-protection \
+--stack-set-name config-proactive-engagement \
 --template-body file://code/route53/config-proactive-engagement/cfn/config-proactive-engagement.yaml \
---capabilities CAPABILITY__AUTO__EXPAND CAPABILITY__NAMED__IAM CAPABILITY__IAM \
---permission-model SERVICE__MANAGED \
+--capabilities CAPABILITY_AUTO_EXPAND CAPABILITY_NAMED_IAM CAPABILITY_IAM \
+--permission-model SERVICE_MANAGED \
 --auto-deployment Enabled=true,RetainStacksOnAccountRemoval=false \
 --parameters \
 ParameterKey=CodeS3BucketPrefix,ParameterValue=$BucketPrefix-$PayerAccountId \
@@ -157,7 +157,7 @@ ParameterKey=CodeS3Key,ParameterValue=lambda.zip
 ### Add stacks to stack set
 ```
 aws cloudformation create-stack-instances \
---stack-set-name route53-associate-shield-protection \
+--stack-set-name config-proactive-engagement \
 --regions $Regions \
 --deployment-targets OrganizationalUnitIds=$ParentRoot \
 --operation-preferences RegionConcurrencyType=SEQUENTIAL,MaxConcurrentPercentage=100 
