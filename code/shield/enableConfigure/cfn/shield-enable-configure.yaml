@@ -115,7 +115,7 @@ Resources:
               - shield:AssociateDRTRole
               - shield:DisassociateDRTRole
               - shield:DescribeDRTAccess
-              - shield:DescribeEmergencyContactSetting
+              - shield:DescribeEmergencyContactSettings
               - shield:EnableProactiveEngagement
               - shield:DisableProactiveEngagement
               - shield:AssociateProactiveEngagementDetails
