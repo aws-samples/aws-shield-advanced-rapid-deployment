@@ -255,7 +255,7 @@ Resources:
     DependsOn:
       - CalculatedHealthCheck
     Properties:
-      ServiceToken: !ImportValue Route53ShieldProtectionManageLambdaFunctionArn
+      ServiceToken: !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:config-proactive-engagement-${AWS::Region}"
       ResourceArn: !Ref resourceArn
       CalculatedHCId: !Ref CalculatedHealthCheck
 Outputs:
