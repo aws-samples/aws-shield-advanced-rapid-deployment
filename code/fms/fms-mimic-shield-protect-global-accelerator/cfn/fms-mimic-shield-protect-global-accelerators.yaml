@@ -1,4 +1,21 @@
 AWSTemplateFormatVersion: 2010-09-09
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "S3 Information"
+        Parameters:
+          - CodeS3BucketPrefix
+          - CodeS3Key
+      - Label:
+          default: "Tags"
+        Parameters:
+          - CheckTags
+          - TagUsage
+      - Label:
+          default: "CloudWatch Event Rule"
+        Parameters:
+          - ScheduleExpression
 Parameters:
   CodeS3BucketPrefix:
     Type: String
@@ -93,7 +110,7 @@ Resources:
     Properties:
       Runtime: python3.7
       Role: !GetAtt AGAProtectionLambdaRole.Arn
-      Handler: fms/lambda/global-accelerator-protection/indexlambda_handler
+      Handler: fms/global-accelerator-protection/index.lambda_handler
       Timeout: 300
       Code:
         S3Bucket: !Sub "${CodeS3BucketPrefix}-${AWS::Region}"

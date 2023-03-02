@@ -3,11 +3,12 @@ Create a Firewall Manager Security policy to enable Shield Advanced protection t
 
 _____
 
-## CloudFormation Details  
-__Template__: `code/fms/fms-security-policy-shield-regional/cfn/fms-security-policy-shield-regional.yaml`  
+## CloudFormation Details
+__Run in__: `AWS Organizational MGMT/Administrator Account`
 __Mechanism__: `CloudFormation StackSet`  
-__Location(s)__: `Firewall Manager delegated administrator`  
-__Region(s)__: `All Regions`
+__Template__: `code/fms/fms-security-policy-shield-regional/cfn/fms-security-policy-shield-regional.yaml`  
+__Deploy to__: `Firewall Manager delegated administrator`  
+__Region(s)__: `regions specified within the “environment_variables.sh” file`
 
 _____
 ## How it works
@@ -150,8 +151,13 @@ aws cloudformation create-stack-set \
 --execution-role-name AWSCloudFormationStackSetExecutionRole \
 --administration-role-arn arn:aws:iam::$PayerAccountId:role/AWSCloudFormationStackSetAdministrationRole \
 --parameters \
-ParameterKey=ScopeTagName1,ParameterValue=EnableShield \
-ParameterKey=ScopeTagValue1,ParameterValue=True
+ParameterKey=ScopeType,ParameterValue=Org \
+ParameterKey=ProtectRegionalResourceTypes,ParameterValue=AWS::ElasticLoadBalancingV2::LoadBalancer,AWS::ElasticLoadBalancing::LoadBalancer,AWS::EC2::EIP \
+ParameterKey=IncludeExcludeScope,ParameterValue=Include \
+ParameterKey=AutoRemediate,ParameterValue=True \
+ParameterKey=ScopeType,ParameterValue=Org \
+ParameterKey=ResourceTagUsage,ParameterValue=Include
+
 ```
 
 ### Add stacks to stackset

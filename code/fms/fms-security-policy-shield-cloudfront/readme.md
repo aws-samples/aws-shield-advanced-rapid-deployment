@@ -4,9 +4,10 @@ Create a Firewall Manager Security policy to enable Shield Advanced protection t
 _____
 
 ## CloudFormation Details
-__Template__: `code/fms/fms-security-policy-shield-cloudfront/cfn/fms-security-policy-shield-cloudfront.yaml`  
+__Run in__: `AWS Organizational MGMT/Administrator Account`
 __Mechanism__: `CloudFormation StackSet`  
-__Location(s)__: `Firewall Manager delegated administrator`  
+__Template__: `code/fms/fms-security-policy-shield-cloudfront/cfn/fms-security-policy-shield-cloudfront.yaml`  
+__Deploy to__: `Firewall Manager delegated administrator`  
 __Region(s)__: `us-east-1`
 
 _____
@@ -129,7 +130,14 @@ aws cloudformation create-stack-set \
 --capabilities CAPABILITY_AUTO_EXPAND CAPABILITY_NAMED_IAM CAPABILITY_IAM \
 --permission-model SELF_MANAGED \
 --execution-role-name AWSCloudFormationStackSetExecutionRole \
---administration-role-arn arn:aws:iam::$PayerAccountId:role/AWSCloudFormationStackSetAdministrationRole
+--administration-role-arn arn:aws:iam::$FMSAccountId:role/AWSCloudFormationStackSetAdministrationRole
+--parameters \
+ParameterKey=AutoRemediate,ParameterValue=true \
+ParameterKey=ScopeType,ParameterValue=Org \
+ParameterKey=ProtectCloudfront,ParameterValue=True \
+ParameterKey=IncludeExcludeScope,ParameterValue=Include \
+ParameterKey=ResourceTagUsage,ParameterValue=Include
+
 ```
 
 ### Add stacks to stack set
@@ -137,5 +145,5 @@ aws cloudformation create-stack-set \
 aws cloudformation create-stack-instances \
 --stack-set-name fms-security-policy-shield-cloudfront \
 --regions us-east-1 \
---deployment-targets Accounts=$FMSAccountI\
+--deployment-targets Accounts=$FMSAccountId\
 ```

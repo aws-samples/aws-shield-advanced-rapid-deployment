@@ -1,4 +1,29 @@
 AWSTemplateFormatVersion: 2010-09-09
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "FMS Policy"
+        Parameters:
+          - ProtectRegionalResourceTypes
+          - AutoRemediate
+      - Label:
+          default: "Accounts and Organization"
+        Parameters:
+          - AccountScopeList
+          - IncludeExcludeScope
+          - OUScopeList
+          - ScopeType
+      - Label:
+          default: "FMS Policy Resource Tagging"
+        Parameters:
+          - ResourceTagUsage
+          - ScopeTagName1
+          - ScopeTagValue1
+          - ScopeTagName2
+          - ScopeTagValue2
+          - ScopeTagName3
+          - ScopeTagValue3
 Parameters:
   AccountScopeList:
     Type: CommaDelimitedList
