@@ -50,7 +50,7 @@ def config_eval_put(evaluation,resultToken):
         return()
     except botocore.exceptions.ClientError as error:
         return (error.response)
-    
+
 def lambda_handler(event, context):
     if not 'invokingEvent' in event.keys():
         return()
