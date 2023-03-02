@@ -185,13 +185,16 @@ def build_resource_details(resourceArn):
                 response['resourceArn'] = elbv2Arn
                 response['resourceId'] = resourceId
                 response['resourceType'] = 'nlb'
-                return (response)                
+                return (response)
             elif "InstanceId" in address.keys():
                 logger.debug("Found Instance")
                 response['stackSuffix'] = "-".join([address['InstanceId'],allocId])
                 response['resourceArn'] = "".join(["arn:aws:ec2:",region, ":", accountId,":instance/",address['InstanceId']])
                 response['resourceId'] = allocId
                 response['resourceType'] = 'instance'
+                return (response)
+            else:
+                response['resourceType'] = "EIPNotAttachedtoSupportedResourceType"
                 return (response)
         else:
             logger.debug("Is NonAttachedEIP")
@@ -203,14 +206,14 @@ def build_resource_details(resourceArn):
         response['resourceId'] = resourceId
         response['stackSuffix'] = resourceId
         return (response)
-    else:    
+    else:
         response = {
             "resourceType":"unknown",
             "resourceId": "unknown",
             "stackSuffix": "unknown"
         }
         return (response)
-    
+
     #ResourceArn: arn:aws:ec2:us-east-1:619607014791:eip-allocation/eipalloc-0745738c723bc950b | EIP on EC2
     #ResourceArn: arn:aws:cloudfront::619607014791:distribution/E2GVR1S0PP5KZ0
     #ResourceArn: arn:aws:elasticloadbalancing:us-east-1:619607014791:loadbalancer/app/prodapp/a183b0992714a862 | app/prodapp/a183b0992714a862
@@ -235,7 +238,7 @@ def get_deleted_resource_arn(protectionId):
                 )['configurationItems']
             except botocore.exceptions.ClientError as error:
                 logger.debug(error.response['Error'])
-                return (error.response['Error'])  
+                return (error.response['Error'])
         else:
             logger.debug(error.response['Error'])
             return (error.response['Error'])
