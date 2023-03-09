@@ -355,11 +355,8 @@ Resources:
           Value: !Join ["-", ["CalculatedHC", !Select [3,!Split ["/",!Ref resourceArn]]]]
     ShieldAssociation:
       Type: Custom::ShieldProtectionHealthCheck
-<<<<<<< HEAD
-=======
       DependsOn:
         - CalculatedHealthCheck
->>>>>>> mainline
       Properties:
         ServiceToken: !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:config-proactive-engagement-${AWS::Region}"
         ResourceArn: !Ref resourceArn
