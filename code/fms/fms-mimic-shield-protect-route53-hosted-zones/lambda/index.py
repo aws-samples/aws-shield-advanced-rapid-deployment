@@ -1,5 +1,5 @@
 import sys
-sys.path.insert(0,'./fms/lambda/r53-hosted-zone-protection')
+sys.path.insert(0,'./fms/fms-mimic-shield-protect-route53-hosted-zones/lambda')
 import boto3
 import os
 import botocore

@@ -1,4 +1,13 @@
 AWSTemplateFormatVersion: 2010-09-09
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Alerting"
+        Parameters:
+          - TopicName
+          - SubscriptionEmail
+          - ScheduleExpression
 Parameters:
   TopicName:
     Type: String
@@ -78,6 +87,11 @@ Resources:
               - 'sts:AssumeRole'
       Path: /
   OrgSNSCloudwatchAccessLambdaPolicy:
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W12
+            reason: "Wildcard IAM policy required, organizations API only supports *"
     Type: 'AWS::IAM::Policy'
     Properties:
       PolicyName: LocalPolicy
@@ -92,8 +106,10 @@ Resources:
             Resource: 'arn:aws:logs:*:*:*'
           - Effect: Allow
             Action:
-              #- "iam:PassRole"
               - "organizations:ListAccounts"
+            Resource: "*"
+          - Effect: Allow
+            Action:
               - "sns:SetTopicAttributes"
               - 'sns:GetTopicAttributes'
             Resource: !Ref SNSTopic
